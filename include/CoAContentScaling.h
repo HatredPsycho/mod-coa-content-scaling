@@ -6,6 +6,7 @@
 #ifndef COA_CONTENT_SCALING_H
 #define COA_CONTENT_SCALING_H
 
+#include "CombatBudgetProfile.h"
 #include "ContentEra.h"
 #include "ContentTier.h"
 #include "Define.h"
@@ -78,6 +79,13 @@ public:
     [[nodiscard]] uint8 GetEffectiveCreatureLevel(CreatureTemplate const* cinfo, Creature const* creature, uint8 authoredLevel) const;
     [[nodiscard]] int32 GetEffectiveQuestLevel(Quest const* quest) const;
     [[nodiscard]] uint32 GetEffectiveQuestMinLevel(Quest const* quest) const;
+
+    // One source of truth for what a creature is worth: the same context, group scale and
+    // calibrated boss profile the spawn path applies, so a report cannot drift from reality.
+    [[nodiscard]] CalculatedCombatBudget CalculateCreatureBudget(CreatureTemplate const* cinfo, Creature* creature,
+                                                                CreatureScaleContext* outContext = nullptr) const;
+    [[nodiscard]] float GetEffectiveCreatureArmor(CreatureTemplate const* cinfo, Creature const* creature,
+                                                  float generatedArmor) const;
 
     // Combat scaling calculations
     void ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature);

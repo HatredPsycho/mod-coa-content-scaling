@@ -177,19 +177,28 @@ private:
         if (!cinfo)
             return true;
 
-        CreatureScaleContext const ctx = sCombatBudgetProfile->BuildContext(cinfo, target, target->GetLevel());
-        CalculatedCombatBudget const budget = sCombatBudgetProfile->CalculateBudget(cinfo, ctx);
+        CreatureScaleContext ctx;
+        CalculatedCombatBudget const budget = sCoAContentScaling->CalculateCreatureBudget(cinfo, target, &ctx);
+
+        CreatureScaleContext fullGroupCtx = ctx;
+        fullGroupCtx.groupHealthScale = 1.0f;
+        fullGroupCtx.groupDamageScale = 1.0f;
+        CalculatedCombatBudget const fullGroup = sCombatBudgetProfile->CalculateBudget(cinfo, fullGroupCtx);
         EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForCreature(
             cinfo->Entry, target->GetMapId(), target->GetAreaId(), cinfo->expansion, cinfo->maxlevel);
 
         handler->PSendSysMessage("=== Creature Scaling: {} (Entry: {}) ===", cinfo->Name.c_str(), cinfo->Entry);
         handler->PSendSysMessage("Era: {} | Resolved by: {} (Confidence: {:.2f})",
             ContentEraToString(eraRes.era).data(), EraResolutionSourceToString(eraRes.source).data(), eraRes.confidence);
-        handler->PSendSysMessage("Authored Level: {} | Effective Level: {}", uint32(ctx.authoredLevel), uint32(ctx.effectiveLevel));
+        handler->PSendSysMessage("Authored Level: {} | Current Level: {}", uint32(ctx.authoredLevel), uint32(ctx.effectiveLevel));
         handler->PSendSysMessage("Tier: {} | HealthMod: {:.2f} | DamageMod: {:.2f}",
             ContentTierToString(ctx.tier).data(), cinfo->ModHealth, cinfo->DamageModifier);
+        handler->PSendSysMessage("Group Scale: health x{:.4f} | damage x{:.4f}",
+            ctx.groupHealthScale, ctx.groupDamageScale);
         handler->PSendSysMessage("Scaled Health: {} | Mana: {} | Armor: {:.0f} | AP: {}",
             budget.health, budget.mana, budget.armor, budget.attackPower);
+        handler->PSendSysMessage("At full group: health {} (this is not what the creature carries)",
+            fullGroup.health);
         handler->PSendSysMessage("Damage Range: {:.1f} - {:.1f} | Current HP: {} / {}",
             budget.minDamage, budget.maxDamage, target->GetHealth(), target->GetMaxHealth());
 

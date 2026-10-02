@@ -206,15 +206,13 @@ uint32 CoAContentScaling::GetEffectiveQuestMinLevel(Quest const* quest) const
     return static_cast<uint32>(_layout.MapAuthoredToEffective(era, static_cast<uint8>(authoredMin)));
 }
 
-void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature)
+CalculatedCombatBudget CoAContentScaling::CalculateCreatureBudget(CreatureTemplate const* cinfo, Creature* creature,
+                                                                 CreatureScaleContext* outContext) const
 {
-    _creatureHookCalls.fetch_add(1, std::memory_order_relaxed);
+    CreatureScaleContext ctx = sCombatBudgetProfile->BuildContext(cinfo, creature,
+        creature ? creature->GetLevel() : (cinfo ? cinfo->maxlevel : 1));
 
-    if (!_enabled || !cinfo || !creature)
-        return;
-
-    Map* map = creature->GetMap();
-    CreatureScaleContext ctx = sCombatBudgetProfile->BuildContext(cinfo, creature, creature->GetLevel());
+    Map* map = creature ? creature->GetMap() : nullptr;
 
     uint32 calibratedHp = 0;
     if (_groupScalingEnabled && map && map->IsDungeon())
@@ -234,6 +232,33 @@ void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Crea
     CalculatedCombatBudget budget = sCombatBudgetProfile->CalculateBudget(cinfo, ctx);
     if (calibratedHp > 0)
         budget.health = calibratedHp;
+
+    if (outContext)
+        *outContext = ctx;
+
+    return budget;
+}
+
+float CoAContentScaling::GetEffectiveCreatureArmor(CreatureTemplate const* cinfo, Creature const* creature,
+                                                   float generatedArmor) const
+{
+    if (!_enabled || !cinfo)
+        return generatedArmor;
+
+    CreatureScaleContext const ctx = sCombatBudgetProfile->BuildContext(cinfo, creature,
+        creature ? creature->GetLevel() : cinfo->maxlevel);
+
+    return sCombatBudgetProfile->CalculateBudget(cinfo, ctx).armor;
+}
+
+void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature)
+{
+    _creatureHookCalls.fetch_add(1, std::memory_order_relaxed);
+
+    if (!_enabled || !cinfo || !creature)
+        return;
+
+    CalculatedCombatBudget const budget = CalculateCreatureBudget(cinfo, creature);
 
     float const pct = creature->GetMaxHealth() ? creature->GetHealthPct() : 100.0f;
     creature->SetCreateHealth(budget.health);
@@ -758,12 +783,19 @@ namespace
                 {
                     return sCoAContentScaling->GetEffectiveCreatureLevel(cinfo, creature, cinfo ? cinfo->maxlevel : 1);
                 }, std::memory_order_relaxed);
+
+                LocalLevelScaling::CreatureArmorOwner.store([](CreatureTemplate const* cinfo, Creature const* creature,
+                    float generatedArmor) -> float
+                {
+                    return sCoAContentScaling->GetEffectiveCreatureArmor(cinfo, creature, generatedArmor);
+                }, std::memory_order_relaxed);
             }
             else
             {
                 LocalLevelScaling::QuestBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
             }
         }
     };
