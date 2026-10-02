@@ -571,11 +571,20 @@ void CoAContentScaling::OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::Lfg
             break;
 
         case lfg::LfgCompositionMode::BOT_FILL:
-            policy.bypassMatchmaking = false;
-            policy.requireStandardRoles = true;
-            policy.minPlayers = 5;
-            policy.targetPlayers = 5;
+        {
+            // Upstream wrote this mode as matchmaking by another name, which meant a player who
+            // picked it still waited for four strangers and the provider was never reached. Asking
+            // for bots means not waiting: the group that is here forms at once, and whoever
+            // provides bots fills it when the instance opens.
+            policy.bypassMatchmaking = true;
+            policy.requireStandardRoles = false;
+            Player* player = ObjectAccessor::FindPlayer(guid);
+            Group* grp = player ? player->GetGroup() : nullptr;
+            uint8 const currentPartySize = grp ? grp->GetMembersCount() : 1;
+            policy.minPlayers = currentPartySize;
+            policy.targetPlayers = currentPartySize;
             break;
+        }
 
         case lfg::LfgCompositionMode::CURRENT_PARTY:
         {
