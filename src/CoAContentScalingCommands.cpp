@@ -70,25 +70,25 @@ private:
     {
         ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
         handler->PSendSysMessage("=== CoA Universal Content Scaling Status ===");
-        handler->PSendSysMessage("Enabled: %s", sCoAContentScaling->IsEnabled() ? "Yes" : "No");
-        handler->PSendSysMessage("MaxPlayerLevel: %u", uint32(layout.maxLevel));
-        handler->PSendSysMessage("Active Packs: Classic%s%s",
+        handler->PSendSysMessage("Enabled: {}", sCoAContentScaling->IsEnabled() ? "Yes" : "No");
+        handler->PSendSysMessage("MaxPlayerLevel: {}", uint32(layout.maxLevel));
+        handler->PSendSysMessage("Active Packs: Classic{}{}",
             layout.tbcEnabled ? ", TBC" : "", layout.wotlkEnabled ? ", WotLK" : "");
-        handler->PSendSysMessage("Group Scaling: %s", sCoAContentScaling->IsGroupScalingEnabled() ? "Enabled" : "Disabled");
-        handler->PSendSysMessage("Adaptive Mechanics: %s", sCoAContentScaling->IsAdaptiveMechanicsEnabled() ? "Enabled" : "Disabled");
+        handler->PSendSysMessage("Group Scaling: {}", sCoAContentScaling->IsGroupScalingEnabled() ? "Enabled" : "Disabled");
+        handler->PSendSysMessage("Adaptive Mechanics: {}", sCoAContentScaling->IsAdaptiveMechanicsEnabled() ? "Enabled" : "Disabled");
         return true;
     }
 
     static bool HandleCensus(ChatHandler* handler)
     {
-        handler->PSendSysMessage("=== CoA Content Census Status (Schema: %u) ===", GENERATED_CONTENT_CENSUS_SCHEMA_VERSION);
-        handler->PSendSysMessage("Authoritative Maps: %zu (PvE Instances: %zu, Excluded PvP: 65)",
+        handler->PSendSysMessage("=== CoA Content Census Status (Schema: {}) ===", GENERATED_CONTENT_CENSUS_SCHEMA_VERSION);
+        handler->PSendSysMessage("Authoritative Maps: {} (PvE Instances: {}, Excluded PvP: 65)",
             sGeneratedMapProfiles.size(), sGeneratedInstanceProfiles.size());
-        handler->PSendSysMessage("Quests: %zu profiles in census", sGeneratedQuestProfiles.size());
-        handler->PSendSysMessage("Creature Placements: %zu spawn-map profiles", sGeneratedCreaturePlacements.size());
-        handler->PSendSysMessage("Item Drops: %zu equipment profiles", sGeneratedItemProfiles.size());
-        handler->PSendSysMessage("LFG Dungeon Entries: %zu profiles mapped", sGeneratedLfgProfiles.size());
-        handler->PSendSysMessage("Dungeon Access Entries: %zu profiles mapped", sGeneratedAccessProfiles.size());
+        handler->PSendSysMessage("Quests: {} profiles in census", sGeneratedQuestProfiles.size());
+        handler->PSendSysMessage("Creature Placements: {} spawn-map profiles", sGeneratedCreaturePlacements.size());
+        handler->PSendSysMessage("Item Drops: {} equipment profiles", sGeneratedItemProfiles.size());
+        handler->PSendSysMessage("LFG Dungeon Entries: {} profiles mapped", sGeneratedLfgProfiles.size());
+        handler->PSendSysMessage("Dungeon Access Entries: {} profiles mapped", sGeneratedAccessProfiles.size());
         handler->PSendSysMessage("Generator: v3.1.0 (Census Integrity: High Confidence, 0 PvP Leaks)");
         return true;
     }
@@ -97,15 +97,15 @@ private:
     {
         ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
         handler->PSendSysMessage("=== CoA Progression Layout ===");
-        handler->PSendSysMessage("MaxPlayerLevel: %u", uint32(layout.maxLevel));
-        handler->PSendSysMessage("Classic: %u -> %u", uint32(layout.classic.minLevel), uint32(layout.classic.maxLevel));
+        handler->PSendSysMessage("MaxPlayerLevel: {}", uint32(layout.maxLevel));
+        handler->PSendSysMessage("Classic: {} -> {}", uint32(layout.classic.minLevel), uint32(layout.classic.maxLevel));
         if (layout.tbc.has_value())
-            handler->PSendSysMessage("TBC:     %u -> %u", uint32(layout.tbc->minLevel), uint32(layout.tbc->maxLevel));
+            handler->PSendSysMessage("TBC:     {} -> {}", uint32(layout.tbc->minLevel), uint32(layout.tbc->maxLevel));
         else
             handler->PSendSysMessage("TBC:     [Disabled / Locked]");
 
         if (layout.wotlk.has_value())
-            handler->PSendSysMessage("WotLK:   %u -> %u", uint32(layout.wotlk->minLevel), uint32(layout.wotlk->maxLevel));
+            handler->PSendSysMessage("WotLK:   {} -> {}", uint32(layout.wotlk->minLevel), uint32(layout.wotlk->maxLevel));
         else
             handler->PSendSysMessage("WotLK:   [Disabled / Locked]");
 
@@ -134,11 +134,11 @@ private:
             eraProgress = float(playerLevel - activeRange.minLevel) / float(activeRange.maxLevel - activeRange.minLevel);
 
         handler->PSendSysMessage("=== Player Progression Status ===");
-        handler->PSendSysMessage("Current Level: %u / %u (MaxPlayerLevel: %u)",
+        handler->PSendSysMessage("Current Level: {} / {} (MaxPlayerLevel: {})",
             playerLevel, layout.maxLevel, layout.maxLevel);
-        handler->PSendSysMessage("Enabled Packs: Classic%s%s",
+        handler->PSendSysMessage("Enabled Packs: Classic{}{}",
             layout.tbcEnabled ? ", TBC" : "", layout.wotlkEnabled ? ", WotLK" : "");
-        handler->PSendSysMessage("Effective Era: %s (Range: %u - %u | Progress: %.1f%%)",
+        handler->PSendSysMessage("Effective Era: {} (Range: {} - {} | Progress: {:.1f}%)",
             ContentEraToString(activeEra).data(), activeRange.minLevel, activeRange.maxLevel, eraProgress * 100.0f);
 
         // Display tier unlock gates for active era
@@ -147,11 +147,11 @@ private:
         uint8 const raidMidUnlock = sProgressionRewardResolver->ResolveTierUnlockLevel(ContentTier::RAID_MID, activeEra, layout);
         uint8 const raidEndUnlock = sProgressionRewardResolver->ResolveTierUnlockLevel(ContentTier::RAID_END, activeEra, layout);
 
-        handler->PSendSysMessage("Unlock Gates [%s]:", ContentEraToString(activeEra).data());
-        handler->PSendSysMessage(" - Heroic Dungeons: L%u (%s)", heroicUnlock, playerLevel >= heroicUnlock ? "UNLOCKED" : "LOCKED");
-        handler->PSendSysMessage(" - Raid Entry:     L%u (%s)", raidEntryUnlock, playerLevel >= raidEntryUnlock ? "UNLOCKED" : "LOCKED");
-        handler->PSendSysMessage(" - Raid Mid:       L%u (%s)", raidMidUnlock, playerLevel >= raidMidUnlock ? "UNLOCKED" : "LOCKED");
-        handler->PSendSysMessage(" - Raid End/Pinn.: L%u (%s)", raidEndUnlock, playerLevel >= raidEndUnlock ? "UNLOCKED" : "LOCKED");
+        handler->PSendSysMessage("Unlock Gates [{}]:", ContentEraToString(activeEra).data());
+        handler->PSendSysMessage(" - Heroic Dungeons: L{} ({})", heroicUnlock, playerLevel >= heroicUnlock ? "UNLOCKED" : "LOCKED");
+        handler->PSendSysMessage(" - Raid Entry:     L{} ({})", raidEntryUnlock, playerLevel >= raidEntryUnlock ? "UNLOCKED" : "LOCKED");
+        handler->PSendSysMessage(" - Raid Mid:       L{} ({})", raidMidUnlock, playerLevel >= raidMidUnlock ? "UNLOCKED" : "LOCKED");
+        handler->PSendSysMessage(" - Raid End/Pinn.: L{} ({})", raidEndUnlock, playerLevel >= raidEndUnlock ? "UNLOCKED" : "LOCKED");
 
         return true;
     }
@@ -178,15 +178,15 @@ private:
         EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForCreature(
             cinfo->Entry, target->GetMapId(), target->GetAreaId(), cinfo->expansion, cinfo->maxlevel);
 
-        handler->PSendSysMessage("=== Creature Scaling: %s (Entry: %u) ===", cinfo->Name.c_str(), cinfo->Entry);
-        handler->PSendSysMessage("Era: %s | Resolved by: %s (Confidence: %.2f)",
+        handler->PSendSysMessage("=== Creature Scaling: {} (Entry: {}) ===", cinfo->Name.c_str(), cinfo->Entry);
+        handler->PSendSysMessage("Era: {} | Resolved by: {} (Confidence: {:.2f})",
             ContentEraToString(eraRes.era).data(), EraResolutionSourceToString(eraRes.source).data(), eraRes.confidence);
-        handler->PSendSysMessage("Authored Level: %u | Effective Level: %u", uint32(ctx.authoredLevel), uint32(ctx.effectiveLevel));
-        handler->PSendSysMessage("Tier: %s | HealthMod: %.2f | DamageMod: %.2f",
+        handler->PSendSysMessage("Authored Level: {} | Effective Level: {}", uint32(ctx.authoredLevel), uint32(ctx.effectiveLevel));
+        handler->PSendSysMessage("Tier: {} | HealthMod: {:.2f} | DamageMod: {:.2f}",
             ContentTierToString(ctx.tier).data(), cinfo->ModHealth, cinfo->DamageModifier);
-        handler->PSendSysMessage("Scaled Health: %u | Mana: %u | Armor: %.0f | AP: %u",
+        handler->PSendSysMessage("Scaled Health: {} | Mana: {} | Armor: {:.0f} | AP: {}",
             budget.health, budget.mana, budget.armor, budget.attackPower);
-        handler->PSendSysMessage("Damage Range: %.1f - %.1f | Current HP: %u / %u",
+        handler->PSendSysMessage("Damage Range: {:.1f} - {:.1f} | Current HP: {} / {}",
             budget.minDamage, budget.maxDamage, target->GetHealth(), target->GetMaxHealth());
 
         return true;
@@ -208,26 +208,26 @@ private:
         InstanceScaleContext const ctx = sInstanceScalingMgr->GetOrCreateContext(map);
         EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForMap(ctx.mapId);
 
-        handler->PSendSysMessage("=== Instance Group Scaling (Map: %u, Inst: %u) ===", ctx.mapId, ctx.instanceId);
-        handler->PSendSysMessage("Era: %s | Resolved by: %s",
+        handler->PSendSysMessage("=== Instance Group Scaling (Map: {}, Inst: {}) ===", ctx.mapId, ctx.instanceId);
+        handler->PSendSysMessage("Era: {} | Resolved by: {}",
             ContentEraToString(eraRes.era).data(), EraResolutionSourceToString(eraRes.source).data());
-        handler->PSendSysMessage("Tier: %s | Difficulty: %u",
+        handler->PSendSysMessage("Tier: {} | Difficulty: {}",
             ContentTierToString(ctx.tier).data(), uint32(ctx.difficulty));
-        handler->PSendSysMessage("Actual Players: %u | Challenge Size: %s",
+        handler->PSendSysMessage("Actual Players: {} | Challenge Size: {}",
             map->GetPlayersCountExceptGMs(),
             ctx.challengeSize > 0 ? std::to_string(ctx.challengeSize).c_str() : "Adaptive (0)");
-        handler->PSendSysMessage("Intended Players: %u | Effective Players: %.1f", ctx.intendedPlayers, ctx.effectivePlayers);
-        handler->PSendSysMessage("Encounter Lock: %s (Gen: %llu)",
+        handler->PSendSysMessage("Intended Players: {} | Effective Players: {:.1f}", ctx.intendedPlayers, ctx.effectivePlayers);
+        handler->PSendSysMessage("Encounter Lock: {} (Gen: {})",
             ctx.encounterLocked ? "[FROZEN IN ENCOUNTER]" : "[IDLE / DYNAMIC]",
             static_cast<unsigned long long>(ctx.snapshotGeneration));
         if (ctx.encounterLocked)
         {
-            handler->PSendSysMessage("Encounter Source: %u | Key Type: %u, ID: %u",
+            handler->PSendSysMessage("Encounter Source: {} | Key Type: {}, ID: {}",
                 static_cast<uint32>(ctx.activeEncounterSource),
                 static_cast<uint32>(ctx.activeEncounterKey.type),
                 ctx.activeEncounterKey.id);
         }
-        handler->PSendSysMessage("Multipliers: HP x%.2f | Damage x%.2f | Heal x%.2f | Absorb x%.2f",
+        handler->PSendSysMessage("Multipliers: HP x{:.2f} | Damage x{:.2f} | Heal x{:.2f} | Absorb x{:.2f}",
             ctx.healthScale, ctx.damageScale, ctx.healingScale, ctx.absorbScale);
 
         return true;
@@ -250,20 +250,20 @@ private:
         EncounterContext const encCtx = sInstanceScalingMgr->BuildEncounterContext(map, ctx.lockEncounterId);
         IEncounterAdapter const* adapter = sAdaptiveEncounterMgr->GetAdapter(map->GetId(), ctx.lockEncounterId);
 
-        handler->PSendSysMessage("=== Adaptive Encounter Diagnostics (Map: %u, Inst: %u) ===", map->GetId(), map->GetInstanceId());
-        handler->PSendSysMessage("Active Lock: %s (Encounter ID: %u, Gen: %llu)",
+        handler->PSendSysMessage("=== Adaptive Encounter Diagnostics (Map: {}, Inst: {}) ===", map->GetId(), map->GetInstanceId());
+        handler->PSendSysMessage("Active Lock: {} (Encounter ID: {}, Gen: {})",
             ctx.encounterLocked ? "LOCKED" : "UNLOCKED/IDLE",
             ctx.lockEncounterId, static_cast<unsigned long long>(encCtx.snapshotGeneration));
-        handler->PSendSysMessage("Participants: %u physical | %.1f combat eff | %u mechanic parts (Intended: %u)",
+        handler->PSendSysMessage("Participants: {} physical | {:.1f} combat eff | {} mechanic parts (Intended: {})",
             encCtx.actualParticipants, encCtx.combatEffectivePlayers, encCtx.mechanicParticipants, encCtx.intendedPlayers);
-        handler->PSendSysMessage("Mode: %s | Solo State: Physical: %s | Mechanic: %s",
+        handler->PSendSysMessage("Mode: {} | Solo State: Physical: {} | Mechanic: {}",
             encCtx.challengeSize > 0 ? ("Challenge " + std::to_string(encCtx.challengeSize)).c_str() : "Adaptive (0)",
             encCtx.isPhysicallySolo ? "Yes" : "No",
             encCtx.isMechanicSolo ? "Yes" : "No");
 
         if (adapter)
         {
-            handler->PSendSysMessage("Adapter: %s [COMPAT: %s]",
+            handler->PSendSysMessage("Adapter: {} [COMPAT: {}]",
                 adapter->GetName().data(), CompatibilityToString(adapter->GetCompatibility()).data());
         }
         else
@@ -271,13 +271,13 @@ private:
             handler->PSendSysMessage("Adapter: None (Generic Adaptive Scaling fallback) [COMPAT: AUTO]");
         }
 
-        handler->PSendSysMessage("Sample Mechanics Scaled (at %u mechanic players):", encCtx.mechanicParticipants);
+        handler->PSendSysMessage("Sample Mechanics Scaled (at {} mechanic players):", encCtx.mechanicParticipants);
         uint32 sampleTargets = sAdaptiveEncounterMgr->ResolveMechanic(map->GetId(), ctx.lockEncounterId, 0, EncounterMechanicType::TARGET_COUNT, 4, encCtx);
         uint32 sampleAdds = sAdaptiveEncounterMgr->ResolveMechanic(map->GetId(), ctx.lockEncounterId, 0, EncounterMechanicType::ADD_COUNT, 12, encCtx);
         uint32 sampleReq = sAdaptiveEncounterMgr->ResolveMechanic(map->GetId(), ctx.lockEncounterId, 0, EncounterMechanicType::REQUIRED_PLAYERS, 4, encCtx);
-        handler->PSendSysMessage(" - Target Count: 4 -> %u", sampleTargets);
-        handler->PSendSysMessage(" - Add Wave: 12 -> %u", sampleAdds);
-        handler->PSendSysMessage(" - Required Players: 4 -> %u", sampleReq);
+        handler->PSendSysMessage(" - Target Count: 4 -> {}", sampleTargets);
+        handler->PSendSysMessage(" - Add Wave: 12 -> {}", sampleAdds);
+        handler->PSendSysMessage(" - Required Players: 4 -> {}", sampleReq);
 
         return true;
     }
@@ -287,7 +287,7 @@ private:
         Quest const* quest = sObjectMgr->GetQuestTemplate(questId);
         if (!quest)
         {
-            handler->PSendSysMessage("Quest %u not found.", questId);
+            handler->PSendSysMessage("Quest {} not found.", questId);
             return true;
         }
 
@@ -298,14 +298,14 @@ private:
         uint32 const effectiveMin = sCoAContentScaling->GetEffectiveQuestMinLevel(quest);
         bool const eraEnabled = layout.IsEraEnabled(eraRes.era);
 
-        handler->PSendSysMessage("=== Quest Scaling: %s (ID: %u) ===", quest->GetTitle().c_str(), questId);
-        handler->PSendSysMessage("Era: %s (%s) | Resolved by: %s (Confidence: %.2f)",
+        handler->PSendSysMessage("=== Quest Scaling: {} (ID: {}) ===", quest->GetTitle().c_str(), questId);
+        handler->PSendSysMessage("Era: {} ({}) | Resolved by: {} (Confidence: {:.2f})",
             ContentEraToString(eraRes.era).data(),
             eraEnabled ? "Active" : "Locked / Pack Disabled",
             EraResolutionSourceToString(eraRes.source).data(),
             eraRes.confidence);
-        handler->PSendSysMessage("Authored Level: %d | Effective Level: %d", quest->GetQuestLevel(), effectiveLevel);
-        handler->PSendSysMessage("Authored MinLevel: %u | Effective MinLevel: %u (%s)",
+        handler->PSendSysMessage("Authored Level: {} | Effective Level: {}", quest->GetQuestLevel(), effectiveLevel);
+        handler->PSendSysMessage("Authored MinLevel: {} | Effective MinLevel: {} ({})",
             quest->GetMinLevel(), effectiveMin,
             effectiveMin >= 255 ? "Inaccessible" : "Accessible");
 
@@ -315,8 +315,8 @@ private:
             authoredXP, quest->GetQuestLevel(), effectiveLevel, layout, eraRes.era);
         int32 const moneyAtCap = sProgressionRewardResolver->ResolveMoneyAtCap(effectiveXP, 1.0f);
 
-        handler->PSendSysMessage("Reward XP: Authored %u -> Calibrated %u", authoredXP, effectiveXP);
-        handler->PSendSysMessage("At-Cap Money Conversion: %dg %ds %dc (Guard: 50g cap)",
+        handler->PSendSysMessage("Reward XP: Authored {} -> Calibrated {}", authoredXP, effectiveXP);
+        handler->PSendSysMessage("At-Cap Money Conversion: {}g {}s {}c (Guard: 50g cap)",
             moneyAtCap / 10000, (moneyAtCap % 10000) / 100, moneyAtCap % 100);
 
         return true;
@@ -327,7 +327,7 @@ private:
         ItemTemplate const* item = sObjectMgr->GetItemTemplate(itemId);
         if (!item)
         {
-            handler->PSendSysMessage("Item %u not found.", itemId);
+            handler->PSendSysMessage("Item {} not found.", itemId);
             return true;
         }
 
@@ -350,15 +350,15 @@ private:
             authorityOrigin = "CUSTOM_FALLBACK";
         }
 
-        handler->PSendSysMessage("=== Item Scaling: %s (ID: %u) ===", item->Name1.c_str(), itemId);
-        handler->PSendSysMessage("Authority Origin: %s | Generated Profile: %s | Fallback: %s",
+        handler->PSendSysMessage("=== Item Scaling: {} (ID: {}) ===", item->Name1.c_str(), itemId);
+        handler->PSendSysMessage("Authority Origin: {} | Generated Profile: {} | Fallback: {}",
             authorityOrigin, ctx.hasGeneratedProfile ? "Yes" : "No", ctx.fallbackTierInference ? "Yes" : "No");
-        handler->PSendSysMessage("Era: %s | Tier: %s | Policy: %s",
+        handler->PSendSysMessage("Era: {} | Tier: {} | Policy: {}",
             ContentEraToString(ctx.era).data(), ContentTierToString(ctx.tier).data(), ItemScalingPolicyToString(ctx.policy).data());
-        handler->PSendSysMessage("Source Map: %u | Special Flags: 0x%02X", ctx.sourceMap, uint32(ctx.specialFlags));
-        handler->PSendSysMessage("Authored ReqLevel: %u | Effective ReqLevel: %u", item->RequiredLevel, budget.effectiveRequiredLevel);
-        handler->PSendSysMessage("Authored ItemLevel: %u | Effective ItemLevel: %u", item->ItemLevel, budget.effectiveItemLevel);
-        handler->PSendSysMessage("Multipliers: Stats x%.2f | Ratings x%.2f | Armor x%.2f | DPS x%.2f",
+        handler->PSendSysMessage("Source Map: {} | Special Flags: 0x{:02X}", ctx.sourceMap, uint32(ctx.specialFlags));
+        handler->PSendSysMessage("Authored ReqLevel: {} | Effective ReqLevel: {}", item->RequiredLevel, budget.effectiveRequiredLevel);
+        handler->PSendSysMessage("Authored ItemLevel: {} | Effective ItemLevel: {}", item->ItemLevel, budget.effectiveItemLevel);
+        handler->PSendSysMessage("Multipliers: Stats x{:.2f} | Ratings x{:.2f} | Armor x{:.2f} | DPS x{:.2f}",
             budget.statMultiplier, budget.ratingMultiplier, budget.armorMultiplier, budget.weaponDpsMultiplier);
 
         return true;
@@ -371,15 +371,15 @@ private:
         std::string err;
         if (!layout.Validate(err))
         {
-            handler->PSendSysMessage("[FAIL] ProgressionLayout invalid: %s", err.c_str());
+            handler->PSendSysMessage("[FAIL] ProgressionLayout invalid: {}", err.c_str());
             return true;
         }
 
-        handler->PSendSysMessage("[PASS] ProgressionLayout valid: Cap %u", uint32(layout.maxLevel));
+        handler->PSendSysMessage("[PASS] ProgressionLayout valid: Cap {}", uint32(layout.maxLevel));
         handler->PSendSysMessage("[PASS] Enabled eras continuous and terminating at Cap");
 
         sCoAContentScaling->PurgeExpiredPendingPolicies();
-        handler->PSendSysMessage("[PASS] Pending LFG policies verified (%zu active groups, %zu player aliases)",
+        handler->PSendSysMessage("[PASS] Pending LFG policies verified ({} active groups, {} player aliases)",
             sCoAContentScaling->GetPendingGroupPoliciesCount(), sCoAContentScaling->GetPendingPlayerPoliciesCount());
 
         handler->PSendSysMessage("All validation checks passed.");
@@ -402,17 +402,17 @@ private:
             modeStr = "party";
 
         handler->PSendSysMessage("=== CoA LFG Settings ===");
-        handler->PSendSysMessage("Composition Mode: %s", modeStr.data());
+        handler->PSendSysMessage("Composition Mode: {}", modeStr.data());
         if (challenge == 0)
             handler->SendSysMessage("Challenge Size: Adaptive (matches actual player count)");
         else
-            handler->PSendSysMessage("Challenge Size: %u player(s)", challenge);
+            handler->PSendSysMessage("Challenge Size: {} player(s)", challenge);
 
         size_t const pendingGroups = sCoAContentScaling->GetPendingGroupPoliciesCount();
         size_t const pendingPlayers = sCoAContentScaling->GetPendingPlayerPoliciesCount();
         if (pendingGroups > 0 || pendingPlayers > 0)
         {
-            handler->PSendSysMessage("Pending Policies: %zu group(s), %zu player alias(es)", pendingGroups, pendingPlayers);
+            handler->PSendSysMessage("Pending Policies: {} group(s), {} player alias(es)", pendingGroups, pendingPlayers);
         }
 
         return true;
@@ -423,7 +423,7 @@ private:
         GeneratedLfgProfile const* lfgProf = FindGeneratedLfgProfile(dungeonId);
         if (!lfgProf)
         {
-            handler->PSendSysMessage("LFG Dungeon ID %u not found in census.", dungeonId);
+            handler->PSendSysMessage("LFG Dungeon ID {} not found in census.", dungeonId);
             return true;
         }
 
@@ -437,13 +437,13 @@ private:
 
         bool const eraEnabled = layout.IsEraEnabled(lfgProf->era);
 
-        handler->PSendSysMessage("=== LFG Dungeon Profile: ID %u (Map: %u, Diff: %u) ===",
+        handler->PSendSysMessage("=== LFG Dungeon Profile: ID {} (Map: {}, Diff: {}) ===",
             dungeonId, lfgProf->mapId, uint32(lfgProf->difficulty));
-        handler->PSendSysMessage("Era: %s (Status: %s)",
+        handler->PSendSysMessage("Era: {} (Status: {})",
             ContentEraToString(lfgProf->era).data(), eraEnabled ? "ENABLED" : "LOCKED_EXPANSION");
-        handler->PSendSysMessage("Authored Levels: %u - %u (Target: %u)",
+        handler->PSendSysMessage("Authored Levels: {} - {} (Target: {})",
             uint32(lfgProf->authoredMin), uint32(lfgProf->authoredMax), uint32(lfgProf->authoredTarget));
-        handler->PSendSysMessage("Effective Levels: %u - %u",
+        handler->PSendSysMessage("Effective Levels: {} - {}",
             uint32(effectiveMin), uint32(effectiveMax));
 
         GeneratedAccessProfile const* accessProf = FindGeneratedAccessProfile(lfgProf->mapId, lfgProf->difficulty);
@@ -451,7 +451,7 @@ private:
         {
             uint8 accMin = layout.MapAuthoredToEffective(accessProf->era, accessProf->authoredMin);
             uint8 accMax = layout.MapAuthoredToEffective(accessProf->era, accessProf->authoredMax);
-            handler->PSendSysMessage("Dungeon Access Profile: Authored %u-%u -> Effective %u-%u",
+            handler->PSendSysMessage("Dungeon Access Profile: Authored {}-{} -> Effective {}-{}",
                 uint32(accessProf->authoredMin), uint32(accessProf->authoredMax), uint32(accMin), uint32(accMax));
         }
 
@@ -520,7 +520,7 @@ private:
                     handler->SendSysMessage("Failed to set challenge size (must be 0..40).");
                     return true;
                 }
-                handler->PSendSysMessage("LFG Challenge Size locked to %d players.", val);
+                handler->PSendSysMessage("LFG Challenge Size locked to {} players.", val);
             }
             catch (...)
             {
