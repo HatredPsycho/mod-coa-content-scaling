@@ -142,6 +142,58 @@ public:
         }
     }
 
+    /// Which reward bracket a finished random dungeon pays from. The brackets in
+    /// lfg_dungeon_rewards are keyed by the levels the dungeons were authored at, so a player on a
+    /// realm that compressed those levels points at a bracket far below the content they just ran.
+    /// This maps their effective level back to the authored one.
+    [[nodiscard]] uint8 ResolveLfgRewardLevel(ContentEra era, uint8 playerLevel,
+                                              ProgressionLayout const& layout) const
+    {
+        if (layout.maxLevel == 80 && layout.tbcEnabled && layout.wotlkEnabled)
+            return playerLevel;
+
+        LevelRange const eraRange = layout.GetEraRange(era);
+        if (playerLevel >= eraRange.maxLevel)
+        {
+            switch (era)
+            {
+                case ContentEra::WotLK:
+                    return 80;
+                case ContentEra::TBC:
+                    return 70;
+                case ContentEra::Classic:
+                default:
+                    return 60;
+            }
+        }
+
+        uint8 authMin = 1;
+        uint8 authMax = 60;
+        switch (era)
+        {
+            case ContentEra::WotLK:
+                authMin = 68;
+                authMax = 80;
+                break;
+            case ContentEra::TBC:
+                authMin = 58;
+                authMax = 70;
+                break;
+            case ContentEra::Classic:
+            default:
+                authMin = 1;
+                authMax = 60;
+                break;
+        }
+
+        if (eraRange.maxLevel <= eraRange.minLevel)
+            return authMax;
+
+        float const progress = float(playerLevel - eraRange.minLevel) / float(eraRange.maxLevel - eraRange.minLevel);
+        uint8 const mapped = authMin + static_cast<uint8>(std::round(progress * float(authMax - authMin)));
+        return std::clamp<uint8>(mapped, authMin, authMax);
+    }
+
 private:
     ProgressionRewardResolver() = default;
 };

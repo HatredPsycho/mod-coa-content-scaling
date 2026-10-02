@@ -31,6 +31,7 @@
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
+#include "ProgressionRewardResolver.h"
 #include "QueryResult.h"
 #include "QuestDef.h"
 #include "ScriptMgr.h"
@@ -431,7 +432,7 @@ namespace
     }
 }
 
-bool CoAContentScaling::CanPlayerEnterMap(Player const* player, uint32 mapId) const
+bool CoAContentScaling::CanPlayerEnterMap(Player const* player, uint32 mapId, uint8 difficulty) const
 {
     if (!player || player->IsGameMaster())
         return true;
@@ -443,7 +444,28 @@ bool CoAContentScaling::CanPlayerEnterMap(Player const* player, uint32 mapId) co
     if (!_layout.IsEraEnabled(era))
         return false;
 
+    // The difficulty is carried for the profiles that answer per difficulty; nothing here reads it yet.
+    (void)difficulty;
+
     return true;
+}
+
+uint8 CoAContentScaling::ResolveLfgRewardLevel(Player const* /*player*/, uint32 dungeonId, uint8 playerLevel) const
+{
+    if (!_enabled)
+        return playerLevel;
+
+    ContentEra era = ContentEra::Classic;
+    if (auto const* lfgProfile = FindGeneratedLfgProfile(dungeonId))
+    {
+        era = lfgProfile->era;
+    }
+    else if (lfg::LFGDungeonData const* dungeon = sLFGMgr->GetLFGDungeon(dungeonId))
+    {
+        era = sContentPackRegistry->ResolveEraForMap(dungeon->map);
+    }
+
+    return sProgressionRewardResolver->ResolveLfgRewardLevel(era, playerLevel, _layout);
 }
 
 void CoAContentScaling::SetPlayerLfgMode(ObjectGuid guid, lfg::LfgCompositionMode mode)
@@ -1199,7 +1221,13 @@ namespace
             return true;
         }
 
-        void OnResolveDungeonAccessLevels(Player const* player, uint32 mapId, uint8& minLevel, uint8& maxLevel) override
+        void OnResolveLfgRewardLevel(Player const* player, uint32 dungeonId, uint8& level) override
+        {
+            level = sCoAContentScaling->ResolveLfgRewardLevel(player, dungeonId, level);
+        }
+
+        void OnResolveDungeonAccessLevels(Player const* player, uint32 mapId, Difficulty difficulty,
+            uint8& minLevel, uint8& maxLevel) override
         {
             if (!sCoAContentScaling->IsEnabled() || !player)
                 return;
@@ -1211,7 +1239,10 @@ namespace
                 return;
             }
 
-            auto const* accessProf = FindGeneratedAccessProfile(mapId);
+            // A profile for this difficulty if there is one, otherwise the map's own.
+            auto const* accessProf = FindGeneratedAccessProfile(mapId, uint8(difficulty));
+            if (!accessProf && difficulty != REGULAR_DIFFICULTY)
+                accessProf = FindGeneratedAccessProfile(mapId);
             if (!accessProf)
                 return;
 
