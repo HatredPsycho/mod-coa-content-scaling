@@ -29,8 +29,10 @@ set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_SOURCES
 # there is one copy of each and the loader below calls them directly.
 target_include_directories(modules PUBLIC
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-tbc-content/src"
+    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-wotlk-content/src"
 )
 
 target_sources(modules PRIVATE
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-tbc-content/src/CoATBCContent.cpp"
+    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-wotlk-content/src/CoAWotLKContent.cpp"
 )

@@ -44,7 +44,7 @@ namespace
                 return;
             }
 
-            bool const enabled = sConfigMgr->GetOption<bool>("CoAWotLK.Enable", true);
+            bool const enabled = sConfigMgr->GetOption<bool>("CoAWotLK.Enable", false);
             if (enabled)
             {
                 sCoAContentScaling->SetWotlkEnabled(true);

@@ -1,0 +1,21 @@
+#
+# CoA Wrath of the Lich King Content Pack Configuration
+#
+
+[worldserver]
+
+#
+# CoAWotLK.Enable
+#     Description: Enable the Wrath of the Lich King expansion pack.
+#                  When enabled, WotLK content occupies its layout level band, and the
+#                  progression layout is rebuilt: at MaxPlayerLevel 60 with
+#                  CoAContentScaling.Progression.Mode = Auto and CoATBC.Enable = 1, the three
+#                  eras divide the realm as Classic 1-45, TBC 45-55, WotLK 55-60, which moves
+#                  every authored level again, including the TBC band set by the previous step.
+#                  Set CoAContentScaling.Progression.ClassicEnd and .TbcEnd with
+#                  Progression.Mode = Custom to place the boundaries yourself.
+#                  When disabled, WotLK content is locked/inaccessible to normal players.
+#     Default:     0 - Disabled
+#                  1 - Enabled
+#
+CoAWotLK.Enable = 0
