@@ -9,6 +9,7 @@
 #include "CoaLfgCompat.h"
 
 #include "DBCEnums.h"
+#include "EncounterMechanic.h"
 #include "Define.h"
 #include "LFG.h"
 #include <algorithm>
@@ -53,6 +54,22 @@ enum class EncounterMechanicType : uint8
     PROXIMITY_DISTANCE   = 11,
     HEALING_CONTRIBUTION = 12
 };
+
+// The core asks with its own enum, and this one answers. They are two halves of one question,
+// so a value that moves on either side has to move on both.
+static_assert(static_cast<uint8>(EncounterMechanic::TargetCount) == static_cast<uint8>(EncounterMechanicType::TARGET_COUNT));
+static_assert(static_cast<uint8>(EncounterMechanic::AddCount) == static_cast<uint8>(EncounterMechanicType::ADD_COUNT));
+static_assert(static_cast<uint8>(EncounterMechanic::RequiredPlayers) == static_cast<uint8>(EncounterMechanicType::REQUIRED_PLAYERS));
+static_assert(static_cast<uint8>(EncounterMechanic::RequiredInteractors) == static_cast<uint8>(EncounterMechanicType::REQUIRED_INTERACTORS));
+static_assert(static_cast<uint8>(EncounterMechanic::ObjectiveCount) == static_cast<uint8>(EncounterMechanicType::OBJECTIVE_COUNT));
+static_assert(static_cast<uint8>(EncounterMechanic::VehicleCount) == static_cast<uint8>(EncounterMechanicType::VEHICLE_COUNT));
+static_assert(static_cast<uint8>(EncounterMechanic::WaveSize) == static_cast<uint8>(EncounterMechanicType::WAVE_SIZE));
+static_assert(static_cast<uint8>(EncounterMechanic::StackThreshold) == static_cast<uint8>(EncounterMechanicType::STACK_THRESHOLD));
+static_assert(static_cast<uint8>(EncounterMechanic::SplitDivisor) == static_cast<uint8>(EncounterMechanicType::SPLIT_DIVISOR));
+static_assert(static_cast<uint8>(EncounterMechanic::TimerMs) == static_cast<uint8>(EncounterMechanicType::TIMER_MS));
+static_assert(static_cast<uint8>(EncounterMechanic::FailThreshold) == static_cast<uint8>(EncounterMechanicType::FAIL_THRESHOLD));
+static_assert(static_cast<uint8>(EncounterMechanic::ProximityDistance) == static_cast<uint8>(EncounterMechanicType::PROXIMITY_DISTANCE));
+static_assert(static_cast<uint8>(EncounterMechanic::HealingContribution) == static_cast<uint8>(EncounterMechanicType::HEALING_CONTRIBUTION));
 
 struct EncounterAdapterKey
 {
