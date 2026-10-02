@@ -376,9 +376,38 @@ void CoAContentScaling::RecalculateEncounterCombatStats(Creature* boss, Encounte
     boss->UpdateDamagePhysical(RANGED_ATTACK);
 }
 
+namespace
+{
+    // A dead player on the way back to their own corpse is never kept out. Every check below this
+    // is about whether someone may start this content; retrieving a corpse is finishing something
+    // they already started, and a level requirement that moved under them while they lay there
+    // would strand them as a ghost at the door. The walk up Parent covers a corpse left in an
+    // inner instance of the map being entered.
+    bool IsRetrievingOwnCorpse(Player const* player, uint32 mapId)
+    {
+        if (!player || player->IsAlive() || !player->HasCorpse())
+            return false;
+
+        uint32 corpseMap = player->GetCorpseLocation().GetMapId();
+        while (corpseMap)
+        {
+            if (corpseMap == mapId)
+                return true;
+
+            InstanceTemplate const* corpseInstance = sObjectMgr->GetInstanceTemplate(corpseMap);
+            corpseMap = corpseInstance ? corpseInstance->Parent : 0;
+        }
+
+        return false;
+    }
+}
+
 bool CoAContentScaling::CanPlayerEnterMap(Player const* player, uint32 mapId) const
 {
     if (!player || player->IsGameMaster())
+        return true;
+
+    if (IsRetrievingOwnCorpse(player, mapId))
         return true;
 
     ContentEra const era = sContentPackRegistry->ResolveEraForMap(mapId);
@@ -1130,6 +1159,13 @@ namespace
         {
             if (!sCoAContentScaling->IsEnabled() || !player)
                 return;
+
+            if (IsRetrievingOwnCorpse(player, mapId))
+            {
+                minLevel = 0;
+                maxLevel = 0;
+                return;
+            }
 
             auto const* accessProf = FindGeneratedAccessProfile(mapId);
             if (!accessProf)
