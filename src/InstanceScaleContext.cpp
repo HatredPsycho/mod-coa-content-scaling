@@ -539,7 +539,11 @@ void InstanceScalingMgr::LoadCalibratedBossFlex()
     std::lock_guard<std::mutex> lock(_lock);
     _bossFlexCache.clear();
 
-    QueryResult result = WorldDatabase.Query("SELECT entry, difficulty, per_player_health FROM coa_boss_flex");
+    // coa_boss_flex belongs to this realm's raid difficulty module and keeps one row per boss, with
+    // the difficulty in the column name: hp_d0 Normal, hp_d1 Heroic, hp_d2 Mythic, hp_d3 Ascended.
+    // Upstream reads a row per (entry, difficulty) with a per_player_health column, which is the shape
+    // on the author's fork - asking for a difficulty column here aborts the worldserver at startup.
+    QueryResult result = WorldDatabase.Query("SELECT entry, hp_d0, hp_d1, hp_d2, hp_d3 FROM coa_boss_flex");
     if (!result)
         return;
 
@@ -548,11 +552,13 @@ void InstanceScalingMgr::LoadCalibratedBossFlex()
     {
         Field* fields = result->Fetch();
         uint32 const entry = fields[0].Get<uint32>();
-        uint8 const diff = fields[1].Get<uint8>();
-        uint32 const perPlayerHp = fields[2].Get<uint32>();
 
-        if (diff < MAX_RAID_DIFFICULTY)
+        for (uint8 diff = 0; diff < 4 && diff < MAX_RAID_DIFFICULTY; ++diff)
         {
+            uint32 const perPlayerHp = fields[1 + diff].Get<uint32>();
+            if (!perPlayerHp)
+                continue;
+
             _bossFlexCache[entry][diff] = perPlayerHp;
             ++count;
         }

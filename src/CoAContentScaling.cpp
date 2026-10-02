@@ -99,6 +99,12 @@ void CoAContentScaling::FinalizeAndInitialize()
     if (sContentPackRegistry->IsFinalized())
         return;
 
+    // Switched off means switched off: no layout, no database read, no item templates rewritten. The
+    // table this reads belongs to another module, and upstream read it before anything asked whether
+    // this one was even enabled.
+    if (!_enabled)
+        return;
+
     // 1. Finalize content pack registrations
     sContentPackRegistry->Finalize();
 
@@ -392,7 +398,7 @@ uint32 CoAContentScaling::GetPlayerLfgChallenge(ObjectGuid guid) const
 
 void CoAContentScaling::LoadPlayerLfgSettings(Player* player)
 {
-    if (!player)
+    if (!player || !_enabled)
         return;
 
     ObjectGuid const guid = player->GetGUID();
@@ -431,6 +437,9 @@ void CoAContentScaling::LoadPlayerLfgSettings(Player* player)
 
 void CoAContentScaling::SavePlayerLfgSettings(Player* player)
 {
+    if (!_enabled)
+        return;
+
     if (!player)
         return;
 
