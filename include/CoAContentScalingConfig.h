@@ -6,8 +6,6 @@
 #ifndef COA_CONTENT_SCALING_CONFIG_H
 #define COA_CONTENT_SCALING_CONFIG_H
 
-#include "CoaLfgCompat.h"
-
 #include "Define.h"
 #include "DungeonFinding/LFG.h"
 #include "SoloAssistPolicy.h"

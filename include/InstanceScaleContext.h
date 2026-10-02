@@ -6,8 +6,6 @@
 #ifndef COA_INSTANCE_SCALE_CONTEXT_H
 #define COA_INSTANCE_SCALE_CONTEXT_H
 
-#include "CoaLfgCompat.h"
-
 #include "AdaptiveEncounterAPI.h"
 #include "ContentEra.h"
 #include "ContentTier.h"

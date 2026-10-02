@@ -6,8 +6,6 @@
 #ifndef COA_ADAPTIVE_ENCOUNTER_API_H
 #define COA_ADAPTIVE_ENCOUNTER_API_H
 
-#include "CoaLfgCompat.h"
-
 #include "DBCEnums.h"
 #include "EncounterMechanic.h"
 #include "Define.h"
