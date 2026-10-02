@@ -76,6 +76,10 @@ private:
             layout.tbcEnabled ? ", TBC" : "", layout.wotlkEnabled ? ", WotLK" : "");
         handler->PSendSysMessage("Group Scaling: {}", sCoAContentScaling->IsGroupScalingEnabled() ? "Enabled" : "Disabled");
         handler->PSendSysMessage("Adaptive Mechanics: {}", sCoAContentScaling->IsAdaptiveMechanicsEnabled() ? "Enabled" : "Disabled");
+        handler->PSendSysMessage("Creature hook calls: {} | scaled: {}",
+            sCoAContentScaling->GetCreatureHookCalls(), sCoAContentScaling->GetCreatureScaleApplied());
+        handler->PSendSysMessage("Last scaled: entry {} -> max health {}",
+            sCoAContentScaling->GetLastScaledEntry(), sCoAContentScaling->GetLastScaledHealth());
         return true;
     }
 

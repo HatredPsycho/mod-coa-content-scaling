@@ -13,6 +13,7 @@
 #include "InstanceScaleContext.h"
 #include "ObjectGuid.h"
 #include "ProgressionLayout.h"
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -63,6 +64,11 @@ public:
     [[nodiscard]] bool IsAdaptiveMechanicsEnabled() const { return _adaptiveMechanicsEnabled; }
     [[nodiscard]] bool IsDebugEnabled() const { return _debug; }
 
+    [[nodiscard]] uint64 GetCreatureHookCalls() const { return _creatureHookCalls.load(std::memory_order_relaxed); }
+    [[nodiscard]] uint64 GetCreatureScaleApplied() const { return _creatureScaleApplied.load(std::memory_order_relaxed); }
+    [[nodiscard]] uint32 GetLastScaledEntry() const { return _lastScaledEntry.load(std::memory_order_relaxed); }
+    [[nodiscard]] uint32 GetLastScaledHealth() const { return _lastScaledHealth.load(std::memory_order_relaxed); }
+
     void SetEnabled(bool enabled) { _enabled = enabled; }
     void SetAdaptiveMechanicsEnabled(bool enabled) { _adaptiveMechanicsEnabled = enabled; }
 
@@ -109,7 +115,7 @@ public:
 private:
     CoAContentScaling() = default;
 
-    bool _enabled{true};
+    bool _enabled{false};
     bool _tbcEnabled{false};
     bool _wotlkEnabled{false};
 
@@ -119,6 +125,11 @@ private:
     bool _scaleLootCount{true};
     bool _allowSoloRaids{true};
     bool _debug{false};
+
+    std::atomic<uint64> _creatureHookCalls{0};
+    std::atomic<uint64> _creatureScaleApplied{0};
+    std::atomic<uint32> _lastScaledEntry{0};
+    std::atomic<uint32> _lastScaledHealth{0};
 
     std::string _progressionMode{"Auto"};
     uint8 _customClassicEnd{0};

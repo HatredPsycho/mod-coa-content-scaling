@@ -208,6 +208,8 @@ uint32 CoAContentScaling::GetEffectiveQuestMinLevel(Quest const* quest) const
 
 void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature)
 {
+    _creatureHookCalls.fetch_add(1, std::memory_order_relaxed);
+
     if (!_enabled || !cinfo || !creature)
         return;
 
@@ -263,6 +265,10 @@ void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Crea
     creature->UpdateDamagePhysical(BASE_ATTACK);
     creature->UpdateDamagePhysical(OFF_ATTACK);
     creature->UpdateDamagePhysical(RANGED_ATTACK);
+
+    _creatureScaleApplied.fetch_add(1, std::memory_order_relaxed);
+    _lastScaledEntry.store(cinfo->Entry, std::memory_order_relaxed);
+    _lastScaledHealth.store(creature->GetMaxHealth(), std::memory_order_relaxed);
 }
 
 void CoAContentScaling::RecalculateEncounterCombatStats(Creature* boss, EncounterScaleSnapshot const& snapshot,
