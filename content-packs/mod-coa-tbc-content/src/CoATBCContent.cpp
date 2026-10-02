@@ -40,7 +40,7 @@ namespace
                 return;
             }
 
-            bool const enabled = sConfigMgr->GetOption<bool>("CoATBC.Enable", true);
+            bool const enabled = sConfigMgr->GetOption<bool>("CoATBC.Enable", false);
             if (enabled)
             {
                 sCoAContentScaling->SetTbcEnabled(true);
