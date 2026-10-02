@@ -1,0 +1,20 @@
+#
+# CoA The Burning Crusade Content Pack Configuration
+#
+
+[worldserver]
+
+#
+# CoATBC.Enable
+#     Description: Enable The Burning Crusade expansion pack.
+#                  When enabled, TBC content occupies its layout level band, and the
+#                  progression layout is rebuilt: at MaxPlayerLevel 60 with
+#                  CoAContentScaling.Progression.Mode = Auto, Classic is compressed to 1-45
+#                  and TBC takes 45-60, which moves every authored Classic level on the realm.
+#                  Set CoAContentScaling.Progression.ClassicEnd = 60 to leave Classic alone and
+#                  place TBC content at level 60 instead.
+#                  When disabled, TBC content is locked/inaccessible to normal players.
+#     Default:     0 - Disabled
+#                  1 - Enabled
+#
+CoATBC.Enable = 0
