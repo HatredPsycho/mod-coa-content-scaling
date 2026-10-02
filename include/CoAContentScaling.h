@@ -87,6 +87,11 @@ public:
 
     // Combat scaling calculations
     void ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature);
+
+    // Gives every creature on a dungeon map its budget again, for the group that is there now.
+    // Returns how many were rescaled. Creatures in combat are left alone.
+    uint32 RescaleDungeonCreatures(Map* map);
+    void CountCreatureHookCall() { _creatureHookCalls.fetch_add(1, std::memory_order_relaxed); }
     void RecalculateEncounterCombatStats(Creature* boss, EncounterScaleSnapshot const& snapshot,
                                          EncounterHealthTransferPolicy hpPolicy = EncounterHealthTransferPolicy::FULL_ON_PULL);
 

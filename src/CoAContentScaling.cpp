@@ -254,8 +254,6 @@ float CoAContentScaling::GetEffectiveCreatureArmor(CreatureTemplate const* cinfo
 
 void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature)
 {
-    _creatureHookCalls.fetch_add(1, std::memory_order_relaxed);
-
     if (!_enabled || !cinfo || !creature)
         return;
 
@@ -295,6 +293,36 @@ void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Crea
     _creatureScaleApplied.fetch_add(1, std::memory_order_relaxed);
     _lastScaledEntry.store(cinfo->Entry, std::memory_order_relaxed);
     _lastScaledHealth.store(creature->GetMaxHealth(), std::memory_order_relaxed);
+}
+
+uint32 CoAContentScaling::RescaleDungeonCreatures(Map* map)
+{
+    if (!_enabled || !_groupScalingEnabled || !map || !map->IsDungeon())
+        return 0;
+
+    // A creature is given its budget once, when it is created - and the map is created by whoever
+    // walks in first. Everyone arriving behind them meets a dungeon built for one player, which is
+    // the opposite of what group scaling is for. Nobody in combat is touched: an encounter already
+    // under way keeps the numbers it was pulled with, and that is what the encounter lock is for.
+    uint32 rescaled = 0;
+    for (auto const& entry : map->GetCreatureBySpawnIdStore())
+    {
+        Creature* creature = entry.second;
+        if (!creature || !creature->IsInWorld() || !creature->IsAlive() || creature->IsInCombat())
+            continue;
+
+        if (creature->IsPet() || creature->IsSummon() || creature->IsCritter())
+            continue;
+
+        CreatureTemplate const* cinfo = creature->GetCreatureTemplate();
+        if (!cinfo)
+            continue;
+
+        ApplyCreatureScaling(cinfo, creature);
+        ++rescaled;
+    }
+
+    return rescaled;
 }
 
 void CoAContentScaling::RecalculateEncounterCombatStats(Creature* boss, EncounterScaleSnapshot const& snapshot,
@@ -979,6 +1007,8 @@ namespace
 
         void OnCreatureSelectLevel(CreatureTemplate const* cinfo, Creature* creature) override
         {
+            sCoAContentScaling->CountCreatureHookCall();
+
             if (!sCoAContentScaling->IsEnabled())
                 return;
 
@@ -1269,6 +1299,15 @@ namespace
     {
     public:
         coa_content_scaling_map() : AllMapScript("coa_content_scaling_map") { }
+        void OnPlayerEnterAll(Map* map, Player* player) override
+        {
+            Rescale(map, player);
+        }
+
+        void OnPlayerLeaveAll(Map* map, Player* player) override
+        {
+            Rescale(map, player);
+        }
 
         void OnResolveEncounterMechanic(Map* map, uint32 encounterId, uint32 mechanicId, uint8 mechanicType, uint32 authoredValue, uint32& resolvedValue) override
         {
@@ -1278,6 +1317,21 @@ namespace
             EncounterContext ctx = sInstanceScalingMgr->BuildEncounterContext(map, encounterId);
             resolvedValue = sAdaptiveEncounterMgr->ResolveMechanic(
                 map->GetId(), encounterId, mechanicId, static_cast<EncounterMechanicType>(mechanicType), authoredValue, ctx);
+        }
+
+    private:
+        static void Rescale(Map* map, Player const* player)
+        {
+            if (!player || player->IsDuringRemoveFromWorld())
+                return;
+
+            uint32 const rescaled = sCoAContentScaling->RescaleDungeonCreatures(map);
+            if (rescaled)
+            {
+                LOG_DEBUG("module.coa_content_scaling",
+                          "CoAContentScaling: rescaled {} creatures on map {} for the group that is there now.",
+                          rescaled, map->GetId());
+            }
         }
     };
 }
