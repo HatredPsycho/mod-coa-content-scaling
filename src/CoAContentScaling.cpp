@@ -909,6 +909,68 @@ namespace
                 {
                     return sCoAContentScaling->GetEffectiveCreatureArmor(cinfo, creature, generatedArmor);
                 }, std::memory_order_relaxed);
+
+                // Progression belongs to this module while it runs: the core stands down over the
+                // same three questions, so they are answered once, here.
+                LocalLevelScaling::QuestMoneyMaxLevelOwner.store([](Quest const* quest, uint32 defaultMoney) -> uint32
+                {
+                    if (!quest || !sCoAContentScaling->IsEnabled())
+                        return defaultMoney;
+
+                    auto const& layout = sCoAContentScaling->GetLayout();
+                    ContentEra const era = sContentPackRegistry->ResolveEraForQuest(
+                        quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(quest->GetQuestLevel()));
+                    int32 const effectiveLevel = sCoAContentScaling->GetEffectiveQuestLevel(quest);
+                    uint32 const effectiveXp = sProgressionRewardResolver->ResolveQuestXP(
+                        quest->XPValue(layout.maxLevel, false), quest->GetQuestLevel(), effectiveLevel, layout, era);
+
+                    return static_cast<uint32>(sProgressionRewardResolver->ResolveMoneyAtCap(effectiveXp, 1.0f));
+                }, std::memory_order_relaxed);
+
+                LocalLevelScaling::KillContentLevelOwner.store([](Player const* player, Unit const* /*victim*/,
+                    uint8 defaultContent) -> uint8
+                {
+                    if (!player || !sCoAContentScaling->IsEnabled())
+                        return defaultContent;
+
+                    auto const& layout = sCoAContentScaling->GetLayout();
+                    if (layout.maxLevel == 80 && layout.tbcEnabled && layout.wotlkEnabled)
+                        return defaultContent;
+
+                    // The band follows the character, not the zone: a compressed realm would
+                    // otherwise pay the 580 base of a band the character cannot be in.
+                    uint8 const playerLevel = player->GetLevel();
+                    if (playerLevel >= 71)
+                        return 2;
+                    if (playerLevel >= 61)
+                        return 1;
+
+                    return 0;
+                }, std::memory_order_relaxed);
+
+                LocalLevelScaling::QuestRewardRateOwner.store([](Player const* player, Quest const* quest,
+                    float defaultRate) -> float
+                {
+                    if (!player || !quest || !sCoAContentScaling->IsEnabled())
+                        return defaultRate;
+
+                    if (quest->IsDFQuest())
+                        return sWorld->getRate(RATE_XP_QUEST_DF);
+
+                    ContentEra const era = sContentPackRegistry->ResolveEraForQuest(
+                        quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(quest->GetQuestLevel()));
+
+                    switch (era)
+                    {
+                        case ContentEra::WotLK:
+                            return sWorld->getRate(RATE_XP_QUEST_WOTLK);
+                        case ContentEra::TBC:
+                            return sWorld->getRate(RATE_XP_QUEST_TBC);
+                        case ContentEra::Classic:
+                        default:
+                            return sWorld->getRate(RATE_XP_QUEST);
+                    }
+                }, std::memory_order_relaxed);
             }
             else
             {
@@ -916,6 +978,9 @@ namespace
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::QuestMoneyMaxLevelOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::KillContentLevelOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::QuestRewardRateOwner.store(nullptr, std::memory_order_relaxed);
             }
         }
     };
