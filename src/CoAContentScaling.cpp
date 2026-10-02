@@ -18,6 +18,7 @@
 #include "Field.h"
 #include "GameTime.h"
 #include "Group.h"
+#include "GroupMgr.h"
 #include "GeneratedContentCensus.h"
 #include "InstanceProfile.h"
 #include "InstanceScaleContext.h"
@@ -565,10 +566,27 @@ void CoAContentScaling::OnPlayerLogout(Player* player)
 
 void CoAContentScaling::OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::LfgQueuePolicy& policy)
 {
+    // A group queues under its own guid, not its leader's: LFGMgr calls AddQueueData with gguid
+    // once the role check finishes. Asked with that, there are no player settings to find and no
+    // player to count a party from, so the mode the leader picked was lost and every group was
+    // treated as one player - which then failed its own target of one.
+    Group const* group = nullptr;
+    ObjectGuid owner = guid;
+    if (guid.IsGroup())
+    {
+        group = sGroupMgr->GetGroupByGUID(guid.GetCounter());
+        if (group)
+            owner = group->GetLeaderGUID();
+    }
+    else if (Player const* player = ObjectAccessor::FindPlayer(guid))
+    {
+        group = player->GetGroup();
+    }
+
     PlayerLfgSettings settings;
     {
         std::lock_guard<std::mutex> lock(_lfgSettingsLock);
-        auto it = _playerLfgSettings.find(guid);
+        auto it = _playerLfgSettings.find(owner);
         if (it != _playerLfgSettings.end())
             settings = it->second;
         else
@@ -607,9 +625,7 @@ void CoAContentScaling::OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::Lfg
             // provides bots fills it when the instance opens.
             policy.bypassMatchmaking = true;
             policy.requireStandardRoles = false;
-            Player* player = ObjectAccessor::FindPlayer(guid);
-            Group* grp = player ? player->GetGroup() : nullptr;
-            uint8 const currentPartySize = grp ? grp->GetMembersCount() : 1;
+            uint8 const currentPartySize = group ? uint8(group->GetMembersCount()) : 1;
             policy.minPlayers = currentPartySize;
             policy.targetPlayers = currentPartySize;
             break;
@@ -619,9 +635,7 @@ void CoAContentScaling::OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::Lfg
         {
             policy.bypassMatchmaking = true;
             policy.requireStandardRoles = false;
-            Player* player = ObjectAccessor::FindPlayer(guid);
-            Group* grp = player ? player->GetGroup() : nullptr;
-            uint8 const currentPartySize = grp ? grp->GetMembersCount() : 1;
+            uint8 const currentPartySize = group ? uint8(group->GetMembersCount()) : 1;
             policy.minPlayers = currentPartySize;
             policy.targetPlayers = currentPartySize;
             break;
