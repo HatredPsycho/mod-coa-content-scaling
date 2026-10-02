@@ -471,7 +471,7 @@ private:
         }
         else if (modeArg == "bots" || modeArg == "botfill" || modeArg == "fill")
         {
-            if (!sScriptMgr->HasLfgAutoFillProvider())
+            if (true /* no bot fill provider on this realm */)
             {
                 handler->SendSysMessage("Warning: No bot fill provider is registered. Bot fill mode will fall back to Matchmaking upon queuing.");
             }

@@ -26,6 +26,8 @@ class InstanceMap;
 class Group;
 struct CreatureTemplate;
 
+#include "CoaLfgCompat.h"
+
 namespace lfg
 {
     struct LfgProposal;
@@ -95,7 +97,6 @@ public:
     void OnPlayerLogout(Player* player);
 
     void OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::LfgQueuePolicy& policy);
-    void OnLfgProposalMadeGroup(lfg::LfgProposal const& proposal, Group* group);
     void OnInstanceMapCreated(InstanceMap* instanceMap, Player* player);
 
     // Pending Policy Lifecycle & Diagnostics

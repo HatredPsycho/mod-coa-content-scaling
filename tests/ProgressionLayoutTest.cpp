@@ -16,6 +16,7 @@
 #include "ProgressionContext.h"
 #include "ProgressionRewardResolver.h"
 #include <fstream>
+#include <filesystem>
 #include <sstream>
 #include "gtest/gtest.h"
 
@@ -1663,15 +1664,22 @@ TEST(SourceGraphAuthorityTest, NoHardcodedCustomBoundariesInItemBudgetScalerCpp)
 {
     // Verify that ItemBudgetScaler.cpp does not contain hardcoded custom category boundaries (200000, 350000, 600000).
     // The sole source of truth for custom item ranges and categories is custom_content.json and GeneratedContentCensus.h.
-    std::ifstream file("modules/mod-coa-content-scaling/src/ItemBudgetScaler.cpp");
-    if (!file.is_open())
+    // Found by walking up from wherever the tests were started, because that is the one thing known
+    // about the working directory. The list of guessed absolute paths this replaced held the author's
+    // own checkout, so the test could only pass on one machine.
+    std::ifstream file;
     {
-        // Try fallback path if running from build-local or other working directory
-        file.open("../modules/mod-coa-content-scaling/src/ItemBudgetScaler.cpp");
-    }
-    if (!file.is_open())
-    {
-        file.open("C:/games/coa-core-fork/modules/mod-coa-content-scaling/src/ItemBudgetScaler.cpp");
+        std::filesystem::path here = std::filesystem::current_path();
+        for (int up = 0; up < 6 && !file.is_open(); ++up)
+        {
+            std::filesystem::path const candidate =
+                here / "modules" / "mod-coa-content-scaling" / "src" / "ItemBudgetScaler.cpp";
+            if (std::filesystem::exists(candidate))
+                file.open(candidate);
+            if (!here.has_parent_path() || here.parent_path() == here)
+                break;
+            here = here.parent_path();
+        }
     }
 
     ASSERT_TRUE(file.is_open()) << "Could not open ItemBudgetScaler.cpp to verify absence of hardcoded boundaries";

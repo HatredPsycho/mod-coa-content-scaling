@@ -10,7 +10,10 @@
 #     Default:     1 - Enabled
 #                  0 - Disabled
 #
-CoAContentScaling.Enable = 1
+# This fork ships it off. The module is built and loaded so that the two can be told apart - a realm
+# that compiles it is not yet a realm that plays differently - and switched on in its own step, after
+# a backup, with only Classic in the layout.
+CoAContentScaling.Enable = 0
 
 #
 # CoAContentScaling.Progression.Mode

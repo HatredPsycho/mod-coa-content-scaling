@@ -69,7 +69,7 @@ void CoAContentScaling::LoadConfig()
     std::string const defaultModeStr = sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::LfgDefaultMode, "Matchmaking");
     _defaultLfgCompositionMode = CoAContentScalingConfig::ParseLfgCompositionMode(defaultModeStr);
 
-    if (_defaultLfgCompositionMode == lfg::LfgCompositionMode::BOT_FILL && !sScriptMgr->HasLfgAutoFillProvider())
+    if (_defaultLfgCompositionMode == lfg::LfgCompositionMode::BOT_FILL && true /* no bot fill provider on this realm */)
     {
         LOG_WARN("module.coa_content_scaling", "CoAContentScaling: LFG default mode configured as BotFill, but no bot fill provider is registered! Falling back to Matchmaking.");
         _defaultLfgCompositionMode = lfg::LfgCompositionMode::MATCHMAKING;
@@ -507,7 +507,7 @@ void CoAContentScaling::OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::Lfg
     }
 
     // Capability check: If player selected BOT_FILL but server has no provider, fall back to MATCHMAKING
-    if (settings.compositionMode == lfg::LfgCompositionMode::BOT_FILL && !sScriptMgr->HasLfgAutoFillProvider())
+    if (settings.compositionMode == lfg::LfgCompositionMode::BOT_FILL && true /* no bot fill provider on this realm */)
     {
         LOG_WARN("module.coa_content_scaling",
                  "CoAContentScaling: Player {} requested BOT_FILL but no provider registered. Falling back to MATCHMAKING.",
@@ -548,33 +548,10 @@ void CoAContentScaling::OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::Lfg
     }
 }
 
-void CoAContentScaling::OnLfgProposalMadeGroup(lfg::LfgProposal const& proposal, Group* group)
-{
-    if (!group)
-        return;
-
-    lfg::LFGDungeonData const* dungeon = sLFGMgr->GetLFGDungeon(proposal.dungeonId);
-    if (!dungeon)
-        return;
-
-    std::lock_guard<std::mutex> lock(_pendingPolicyLock);
-    ++_pendingPolicyGeneration;
-
-    PendingInstanceScalePolicy pendingPolicy;
-    pendingPolicy.mapId = dungeon->map;
-    pendingPolicy.groupGuid = group->GetGUID();
-    pendingPolicy.challengeSize = proposal.policy.challengeSize;
-    pendingPolicy.compositionMode = proposal.policy.compositionMode;
-    pendingPolicy.generation = _pendingPolicyGeneration;
-    pendingPolicy.createdAt = GameTime::GetGameTime().count();
-
-    _pendingInstancePolicies[group->GetGUID()] = pendingPolicy;
-
-    for (auto const& pair : proposal.players)
-    {
-        _pendingPlayerPolicies[pair.first] = pendingPolicy;
-    }
-}
+// OnLfgProposalMadeGroup is left out on this fork. It carried the queue policy of a proposal into
+// the instance it was about to create, and lfg::LfgProposal has no policy here: the Dungeon Finder
+// half of the core patch was not taken. An instance scales to whoever is standing in it instead.
+// See include/CoaLfgCompat.h.
 
 std::optional<PendingInstanceScalePolicy> CoAContentScaling::ConsumePendingInstancePolicy(
     uint32 mapId, ObjectGuid groupGuid, ObjectGuid playerGuid)
@@ -778,10 +755,8 @@ namespace
     public:
         coa_content_scaling_global() : GlobalScript("coa_content_scaling_global") { }
 
-        void OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::LfgQueuePolicy& policy) override
-        {
-            sCoAContentScaling->OnResolveLfgQueuePolicy(guid, policy);
-        }
+        // The two LFG hooks this class overrides upstream are left out: this core resolves no
+        // queue policy and makes no proposal that carries one. See include/CoaLfgCompat.h.
 
         void OnInitializeLockedDungeons(Player* player, uint8& /*level*/, uint32& lockData, lfg::LFGDungeonData const* dungeon) override
         {
@@ -820,11 +795,6 @@ namespace
                 if (lockData == lfg::LFG_LOCKSTATUS_TOO_LOW_LEVEL || lockData == lfg::LFG_LOCKSTATUS_TOO_HIGH_LEVEL)
                     lockData = 0;
             }
-        }
-
-        void OnLfgProposalMadeGroup(lfg::LfgProposal const& proposal, Group* group) override
-        {
-            sCoAContentScaling->OnLfgProposalMadeGroup(proposal, group);
         }
 
         void OnInstanceMapCreated(InstanceMap* instanceMap, Player* player) override
