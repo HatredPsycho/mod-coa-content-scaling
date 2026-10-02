@@ -543,6 +543,16 @@ void InstanceScalingMgr::LoadCalibratedBossFlex()
     // the difficulty in the column name: hp_d0 Normal, hp_d1 Heroic, hp_d2 Mythic, hp_d3 Ascended.
     // Upstream reads a row per (entry, difficulty) with a per_player_health column, which is the shape
     // on the author's fork - asking for a difficulty column here aborts the worldserver at startup.
+    //
+    // A realm without the raid difficulty module has no such table at all, and naming a column of a
+    // table that is not there stops the worldserver just the same, so its shape is established first.
+    QueryResult columns = WorldDatabase.Query("SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'coa_boss_flex' AND COLUMN_NAME IN ('hp_d0', 'hp_d1', 'hp_d2', 'hp_d3')");
+    if (!columns || columns->Fetch()[0].Get<uint64>() != 4)
+    {
+        LOG_WARN("server.loading", "UniversalContentScaling: coa_boss_flex is missing or has an unexpected layout, no calibrated boss flex profiles loaded.");
+        return;
+    }
+
     QueryResult result = WorldDatabase.Query("SELECT entry, hp_d0, hp_d1, hp_d2, hp_d3 FROM coa_boss_flex");
     if (!result)
         return;
@@ -560,7 +570,8 @@ void InstanceScalingMgr::LoadCalibratedBossFlex()
                 continue;
 
             _bossFlexCache[entry][diff] = perPlayerHp;
-            ++count;
+            if (perPlayerHp > 0)
+                ++count;
         }
     } while (result->NextRow());
 
