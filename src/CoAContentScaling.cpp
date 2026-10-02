@@ -52,7 +52,10 @@ CoAContentScaling* CoAContentScaling::Instance()
 
 void CoAContentScaling::LoadConfig()
 {
-    _enabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::Enable, true);
+    // False on this fork, where upstream has true: a realm that gets the worldserver without the
+    // configuration file beside it would otherwise start scaling because the file is missing. Nothing
+    // here runs unless mod-coa-content-scaling.conf says so.
+    _enabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::Enable, false);
     _groupScalingEnabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::GroupScalingEnable, true);
     _lockOnEncounterStart = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::GroupScalingLockOnEncounterStart, true);
     _allowSoloRaids = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::GroupScalingAllowSoloRaids, true);
