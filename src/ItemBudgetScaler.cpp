@@ -410,14 +410,18 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
         if (ctx.policy != ItemScalingPolicy::PRESERVE)
         {
             ScaledItemBudget const budget = CalculateItemBudget(proto, layout, ctx);
-            if (budget.statMultiplier < 1.0f || budget.effectiveRequiredLevel != proto->RequiredLevel || budget.effectiveItemLevel != proto->ItemLevel)
+            uint32 const authoredRequiredLevel = proto->RequiredLevel;
+            uint32 const authoredItemLevel = proto->ItemLevel;
+
+            if (budget.statMultiplier < 1.0f || budget.effectiveRequiredLevel != authoredRequiredLevel ||
+                budget.effectiveItemLevel != authoredItemLevel)
             {
                 ScaleItemTemplate(proto, layout);
                 ++actuallyMutated;
-            }
 
-            if (budget.statMultiplier < 1.0f)
-                _appliedMultipliers[proto->ItemId] = { budget.statMultiplier, budget.ratingMultiplier };
+                _appliedScaling[proto->ItemId] = { authoredRequiredLevel, budget.effectiveRequiredLevel,
+                    authoredItemLevel, budget.effectiveItemLevel, budget.statMultiplier, budget.ratingMultiplier };
+            }
         }
     }
 
@@ -432,14 +436,20 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
     LOG_INFO("server.loading", "   Actually mutated: {}", actuallyMutated);
 }
 
+AppliedItemScaling const* ItemBudgetScaler::FindAppliedScaling(uint32 itemEntry) const
+{
+    auto const itr = _appliedScaling.find(itemEntry);
+    return itr != _appliedScaling.end() ? &itr->second : nullptr;
+}
+
 float ItemBudgetScaler::GetStatMultiplier(uint32 itemEntry) const
 {
-    auto const itr = _appliedMultipliers.find(itemEntry);
-    return itr != _appliedMultipliers.end() ? itr->second.first : 1.0f;
+    AppliedItemScaling const* applied = FindAppliedScaling(itemEntry);
+    return applied ? applied->statMultiplier : 1.0f;
 }
 
 float ItemBudgetScaler::GetRatingMultiplier(uint32 itemEntry) const
 {
-    auto const itr = _appliedMultipliers.find(itemEntry);
-    return itr != _appliedMultipliers.end() ? itr->second.second : 1.0f;
+    AppliedItemScaling const* applied = FindAppliedScaling(itemEntry);
+    return applied ? applied->ratingMultiplier : 1.0f;
 }

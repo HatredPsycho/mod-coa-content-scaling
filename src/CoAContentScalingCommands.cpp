@@ -344,9 +344,7 @@ private:
             return true;
         }
 
-        ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
         ItemScalingContext const ctx = ItemScalingContext::Resolve(item);
-        ScaledItemBudget const budget = sItemBudgetScaler->CalculateItemBudget(item, layout, ctx);
 
         char const* authorityOrigin = "FALLBACK_ILVL";
         if (ctx.hasGeneratedProfile)
@@ -369,6 +367,27 @@ private:
         handler->PSendSysMessage("Era: {} | Tier: {} | Policy: {}",
             ContentEraToString(ctx.era).data(), ContentTierToString(ctx.tier).data(), ItemScalingPolicyToString(ctx.policy).data());
         handler->PSendSysMessage("Source Map: {} | Special Flags: 0x{:02X}", ctx.sourceMap, uint32(ctx.specialFlags));
+
+        // The rewrite is in place, so once it has run the template no longer holds what the item was
+        // authored as and recalculating from it would report a cut of x1.00 for every rewritten item.
+        if (AppliedItemScaling const* applied = sItemBudgetScaler->FindAppliedScaling(itemId))
+        {
+            handler->PSendSysMessage("Rewritten at startup.");
+            handler->PSendSysMessage("Authored ReqLevel: {} | Effective ReqLevel: {}",
+                applied->authoredRequiredLevel, applied->effectiveRequiredLevel);
+            handler->PSendSysMessage("Authored ItemLevel: {} | Effective ItemLevel: {}",
+                applied->authoredItemLevel, applied->effectiveItemLevel);
+            handler->PSendSysMessage("Multipliers: Stats x{:.2f} | Ratings x{:.2f} (armor, weapon dps and spell power follow stats)",
+                applied->statMultiplier, applied->ratingMultiplier);
+            return true;
+        }
+
+        ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
+        ScaledItemBudget const budget = sItemBudgetScaler->CalculateItemBudget(item, layout, ctx);
+
+        handler->PSendSysMessage(sItemBudgetScaler->AreItemsScaled() ?
+            "Left as authored at startup; the figures below are what it would be cut to now." :
+            "Items have not been rewritten yet; the figures below are what it would be cut to.");
         handler->PSendSysMessage("Authored ReqLevel: {} | Effective ReqLevel: {}", item->RequiredLevel, budget.effectiveRequiredLevel);
         handler->PSendSysMessage("Authored ItemLevel: {} | Effective ItemLevel: {}", item->ItemLevel, budget.effectiveItemLevel);
         handler->PSendSysMessage("Multipliers: Stats x{:.2f} | Ratings x{:.2f} | Armor x{:.2f} | DPS x{:.2f}",

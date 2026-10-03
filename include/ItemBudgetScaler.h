@@ -10,6 +10,8 @@
 #include "ContentTier.h"
 #include "Define.h"
 #include "ProgressionLayout.h"
+#include "SharedDefines.h"
+#include "SpellAuraDefines.h"
 #include <unordered_map>
 #include <utility>
 
@@ -140,6 +142,65 @@ struct ScaledItemBudget
     float spellPowerMultiplier{1.0f};
 };
 
+// Which cut applies to a flat amount an item hands out through a spell. The applying code and the
+// code that answers the client what a tooltip should say both read this, so the two can never come
+// to different answers about the same effect.
+enum class ScaledAmountFactor : uint8
+{
+    None   = 0,
+    Stat   = 1,
+    Rating = 2
+};
+
+[[nodiscard]] constexpr ScaledAmountFactor GetAuraAmountFactor(uint32 auraType)
+{
+    switch (auraType)
+    {
+        case SPELL_AURA_MOD_STAT:
+        case SPELL_AURA_MOD_INCREASE_HEALTH:
+        case SPELL_AURA_MOD_DAMAGE_DONE:
+        case SPELL_AURA_MOD_HEALING_DONE:
+        case SPELL_AURA_MOD_ATTACK_POWER:
+        case SPELL_AURA_MOD_RANGED_ATTACK_POWER:
+        case SPELL_AURA_SCHOOL_ABSORB:
+            return ScaledAmountFactor::Stat;
+
+        case SPELL_AURA_MOD_RATING:
+            return ScaledAmountFactor::Rating;
+
+        default:
+            return ScaledAmountFactor::None;
+    }
+}
+
+[[nodiscard]] constexpr ScaledAmountFactor GetSpellEffectAmountFactor(uint32 effectType)
+{
+    switch (effectType)
+    {
+        case SPELL_EFFECT_SCHOOL_DAMAGE:
+        case SPELL_EFFECT_HEALTH_LEECH:
+        case SPELL_EFFECT_HEAL:
+        case SPELL_EFFECT_POWER_BURN:
+            return ScaledAmountFactor::Stat;
+
+        default:
+            return ScaledAmountFactor::None;
+    }
+}
+
+// What an item was actually cut by when the templates were rewritten. The rewrite happens in place,
+// so afterwards the template no longer remembers what it was authored as and the cut cannot be
+// derived from it a second time.
+struct AppliedItemScaling
+{
+    uint32 authoredRequiredLevel{0};
+    uint32 effectiveRequiredLevel{0};
+    uint32 authoredItemLevel{0};
+    uint32 effectiveItemLevel{0};
+    float statMultiplier{1.0f};
+    float ratingMultiplier{1.0f};
+};
+
 class ItemBudgetScaler
 {
 public:
@@ -161,6 +222,8 @@ public:
     [[nodiscard]] float GetStatMultiplier(uint32 itemEntry) const;
     [[nodiscard]] float GetRatingMultiplier(uint32 itemEntry) const;
 
+    [[nodiscard]] AppliedItemScaling const* FindAppliedScaling(uint32 itemEntry) const;
+
     [[nodiscard]] bool AreItemsScaled() const { return _itemsScaled; }
     void ResetScaledState() { _itemsScaled = false; }
 
@@ -168,7 +231,7 @@ private:
     ItemBudgetScaler() = default;
 
     bool _itemsScaled{false};
-    std::unordered_map<uint32, std::pair<float, float>> _appliedMultipliers;
+    std::unordered_map<uint32, AppliedItemScaling> _appliedScaling;
 };
 
 #define sItemBudgetScaler ItemBudgetScaler::Instance()
