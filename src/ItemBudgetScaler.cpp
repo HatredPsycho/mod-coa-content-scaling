@@ -409,6 +409,9 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
                 ScaleItemTemplate(proto, layout);
                 ++actuallyMutated;
             }
+
+            if (budget.statMultiplier < 1.0f)
+                _appliedMultipliers[proto->ItemId] = { budget.statMultiplier, budget.ratingMultiplier };
         }
     }
 
@@ -421,4 +424,16 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
     LOG_INFO("server.loading", "   Preserved custom: {}", preservedCustom);
     LOG_INFO("server.loading", "   Special-review: {}", specialReview);
     LOG_INFO("server.loading", "   Actually mutated: {}", actuallyMutated);
+}
+
+float ItemBudgetScaler::GetStatMultiplier(uint32 itemEntry) const
+{
+    auto const itr = _appliedMultipliers.find(itemEntry);
+    return itr != _appliedMultipliers.end() ? itr->second.first : 1.0f;
+}
+
+float ItemBudgetScaler::GetRatingMultiplier(uint32 itemEntry) const
+{
+    auto const itr = _appliedMultipliers.find(itemEntry);
+    return itr != _appliedMultipliers.end() ? itr->second.second : 1.0f;
 }

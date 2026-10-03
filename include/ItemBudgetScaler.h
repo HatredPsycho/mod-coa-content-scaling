@@ -10,6 +10,8 @@
 #include "ContentTier.h"
 #include "Define.h"
 #include "ProgressionLayout.h"
+#include <unordered_map>
+#include <utility>
 
 struct ItemTemplate;
 
@@ -154,6 +156,11 @@ public:
     // Process all loaded items in ObjectMgr (one-time idempotent execution)
     void ScaleAllItems(ProgressionLayout const& layout);
 
+    // What an item was cut by, kept so that the spells it casts can be asked about too: their flat
+    // values belong to the spell and are not touched when the template is rewritten.
+    [[nodiscard]] float GetStatMultiplier(uint32 itemEntry) const;
+    [[nodiscard]] float GetRatingMultiplier(uint32 itemEntry) const;
+
     [[nodiscard]] bool AreItemsScaled() const { return _itemsScaled; }
     void ResetScaledState() { _itemsScaled = false; }
 
@@ -161,6 +168,7 @@ private:
     ItemBudgetScaler() = default;
 
     bool _itemsScaled{false};
+    std::unordered_map<uint32, std::pair<float, float>> _appliedMultipliers;
 };
 
 #define sItemBudgetScaler ItemBudgetScaler::Instance()

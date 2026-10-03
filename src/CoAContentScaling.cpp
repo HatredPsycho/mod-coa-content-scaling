@@ -910,6 +910,22 @@ namespace
                     return sCoAContentScaling->GetEffectiveCreatureArmor(cinfo, creature, generatedArmor);
                 }, std::memory_order_relaxed);
 
+                // The flat damage or healing a spell cast from an item carries. Rewriting the item
+                // leaves its spells alone, so the one number still written for the level the item
+                // came from is asked about here, with the same factor its statistics were cut by.
+                LocalLevelScaling::ItemEffectValueOwner.store([](uint32 itemEntry, int32 value) -> int32
+                {
+                    if (!sCoAContentScaling->IsEnabled())
+                        return value;
+
+                    float const multiplier = sItemBudgetScaler->GetStatMultiplier(itemEntry);
+                    if (multiplier >= 1.0f)
+                        return value;
+
+                    int32 const scaled = static_cast<int32>(std::lround(float(value) * multiplier));
+                    return value > 0 ? std::max(1, scaled) : std::min(-1, scaled);
+                }, std::memory_order_relaxed);
+
                 // Progression belongs to this module while it runs: the core stands down over the
                 // same three questions, so they are answered once, here.
                 LocalLevelScaling::QuestMoneyMaxLevelOwner.store([](Quest const* quest, uint32 defaultMoney) -> uint32
@@ -978,6 +994,7 @@ namespace
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::ItemEffectValueOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMoneyMaxLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::KillContentLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestRewardRateOwner.store(nullptr, std::memory_order_relaxed);
@@ -1182,18 +1199,73 @@ namespace
 
         void OnAfterAuraEffectCalculateAmount(AuraEffect const* effect, Unit* caster, int32& amount) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || amount <= 0)
+            if (!sCoAContentScaling->IsEnabled() || !effect || !amount)
+                return;
+
+            ScaleItemGrantedAmount(effect, amount);
+
+            if (!sCoAContentScaling->IsGroupScalingEnabled() || amount <= 0)
                 return;
 
             if (!caster || !caster->IsCreature() || !caster->GetMap() || !caster->GetMap()->IsDungeon())
                 return;
 
-            if (effect && (effect->GetAuraType() == SPELL_AURA_SCHOOL_ABSORB ||
-                           effect->GetAuraType() == SPELL_AURA_MANA_SHIELD))
+            if (effect->GetAuraType() == SPELL_AURA_SCHOOL_ABSORB ||
+                effect->GetAuraType() == SPELL_AURA_MANA_SHIELD)
             {
                 InstanceScaleContext const ctx = sInstanceScalingMgr->GetOrCreateContext(caster->GetMap());
                 amount = static_cast<int32>(std::ceil(float(amount) * ctx.absorbScale));
             }
+        }
+
+        // What an item hands out through a spell is not touched when its template is rewritten: those
+        // numbers belong to the spell. A weapon whose statistics were cut to a third keeps a proc
+        // written for the level it came from, and that proc is then the one number on it still out of
+        // proportion.
+        //
+        // Only flat amounts, and only from an item that was actually cut. Percentages are a different
+        // aura type and never reach the switch, and whatever a coefficient adds is already in
+        // proportion because the statistics it reads were cut.
+        static void ScaleItemGrantedAmount(AuraEffect const* effect, int32& amount)
+        {
+            Aura const* aura = effect->GetBase();
+            if (!aura)
+                return;
+
+            ObjectGuid const castItemGuid = aura->GetCastItemGUID();
+            if (!castItemGuid)
+                return;
+
+            Unit* owner = aura->GetCaster();
+            Player* player = owner ? owner->ToPlayer() : nullptr;
+            Item const* castItem = player ? player->GetItemByGuid(castItemGuid) : nullptr;
+            if (!castItem)
+                return;
+
+            float multiplier = 1.0f;
+            switch (effect->GetAuraType())
+            {
+                case SPELL_AURA_MOD_STAT:
+                case SPELL_AURA_MOD_INCREASE_HEALTH:
+                case SPELL_AURA_MOD_DAMAGE_DONE:
+                case SPELL_AURA_MOD_HEALING_DONE:
+                case SPELL_AURA_MOD_ATTACK_POWER:
+                case SPELL_AURA_MOD_RANGED_ATTACK_POWER:
+                case SPELL_AURA_SCHOOL_ABSORB:
+                    multiplier = sItemBudgetScaler->GetStatMultiplier(castItem->GetEntry());
+                    break;
+                case SPELL_AURA_MOD_RATING:
+                    multiplier = sItemBudgetScaler->GetRatingMultiplier(castItem->GetEntry());
+                    break;
+                default:
+                    return;
+            }
+
+            if (multiplier >= 1.0f)
+                return;
+
+            int32 const scaled = static_cast<int32>(std::lround(float(amount) * multiplier));
+            amount = amount > 0 ? std::max(1, scaled) : std::min(-1, scaled);
         }
 
         void OnUnitEnterCombat(Unit* unit, Unit* /*victim*/) override
