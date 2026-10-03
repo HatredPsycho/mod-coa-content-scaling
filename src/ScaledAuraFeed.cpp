@@ -9,6 +9,7 @@
 #include "Config.h"
 #include "ItemBudgetScaler.h"
 #include "ItemTemplate.h"
+#include "LocalLevelScaling.h"
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -94,6 +95,26 @@ void AuthoredRange(SpellEffectInfo const& effect, int32& minimum, int32& maximum
     }
 }
 
+// One authored figure and what it was cut to, twice over because an amount may be a range. A kind
+// marks the rows the addon has to do more with than substitute; an ordinary amount carries none.
+void AppendRow(std::string& body, char kind, int64 authoredMinimum, int64 appliedMinimum,
+    int64 authoredMaximum, int64 appliedMaximum)
+{
+    std::string row;
+    if (kind)
+        row += kind;
+
+    row += std::to_string(authoredMinimum) + ',' + std::to_string(appliedMinimum) + ',' +
+        std::to_string(authoredMaximum) + ',' + std::to_string(appliedMaximum);
+
+    if (body.find(row) != std::string::npos || body.size() + row.size() + 1 > MaximumBody)
+        return;
+
+    if (!body.empty())
+        body += ';';
+    body += row;
+}
+
 // An item's own spell is often only the aura that watches for the proc; the figure the tooltip
 // prints lives in what that aura sets off, which the sentence reaches across. So the chain is
 // followed. Where a hop is made by a script rather than written in the spell's data there is
@@ -147,33 +168,30 @@ void CollectSpellAmounts(uint32 spellId, float statMultiplier, float ratingMulti
         if (!authoredMinimum && !authoredMaximum)
             continue;
 
-        std::string const row = std::to_string(authoredMinimum) + ',' + std::to_string(ScaleAmount(authoredMinimum, multiplier)) +
-            ',' + std::to_string(authoredMaximum) + ',' + std::to_string(ScaleAmount(authoredMaximum, multiplier));
-
-        if (body.find(row) != std::string::npos)
-            continue;
-
-        if (body.size() + row.size() + 1 > MaximumBody)
-            return;
-
-        if (!body.empty())
-            body += ';';
-        body += row;
+        AppendRow(body, '\0', authoredMinimum, ScaleAmount(authoredMinimum, multiplier),
+            authoredMaximum, ScaleAmount(authoredMaximum, multiplier));
     }
 }
 
-// Anything whose value moves with the caster's level is left out: the client computes those from the
-// reader's own level and the server cannot say in advance what it printed. Nothing is sent for them,
-// so the addon leaves the line as it found it instead of putting a wrong number in its place.
 // An enchantment, a gem and a socket bonus print their amount from the client's own copy of the
 // enchantment, and which ones an item carries belongs to that one copy of it rather than to the
 // template, so the client names them in its question.
+//
+// The level the enchantment asks for travels with them, marked apart, because the client does not
+// only print that number: it decides from it whether to draw the line as out of reach.
 void CollectEnchantmentAmounts(uint32 enchantmentId, float statMultiplier, float ratingMultiplier, std::string& body)
 {
     SpellItemEnchantmentEntry const* enchantment =
         enchantmentId ? sSpellItemEnchantmentStore.LookupEntry(enchantmentId) : nullptr;
     if (!enchantment)
         return;
+
+    uint32 const authoredRequirement = enchantment->requiredLevel;
+    uint32 const appliedRequirement =
+        LocalLevelScaling::GetEffectiveEnchantmentRequiredLevel(authoredRequirement);
+
+    if (authoredRequirement != appliedRequirement)
+        AppendRow(body, 'r', authoredRequirement, appliedRequirement, authoredRequirement, appliedRequirement);
 
     for (uint8 index = 0; index < MAX_SPELL_ITEM_ENCHANTMENT_EFFECTS; ++index)
     {
@@ -201,15 +219,7 @@ void CollectEnchantmentAmounts(uint32 enchantmentId, float statMultiplier, float
             continue;
 
         uint32 const applied = std::max<uint32>(1, static_cast<uint32>(std::lround(float(authored) * multiplier)));
-        std::string const row = std::to_string(authored) + ',' + std::to_string(applied) + ',' +
-            std::to_string(authored) + ',' + std::to_string(applied);
-
-        if (body.find(row) != std::string::npos || body.size() + row.size() + 1 > MaximumBody)
-            continue;
-
-        if (!body.empty())
-            body += ';';
-        body += row;
+        AppendRow(body, '\0', authored, applied, authored, applied);
     }
 }
 
