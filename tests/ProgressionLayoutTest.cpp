@@ -1347,23 +1347,35 @@ TEST(ItemRuntimeAuthorityTest, CustomItemSafetyAndPreservePolicies)
     EXPECT_EQ(ctxGameplay.policy, ItemScalingPolicy::TIER_ALIGNED);
     EXPECT_FALSE(ctxGameplay.specialFlags & ITEM_SPECIAL_PRESERVE);
 
-    // 4. Unprofiled Custom Item (ItemId >= 100000 without census entry): must safely fallback to PRESERVE + ITEM_SPECIAL_CUSTOM
-    ItemTemplate unprofiledCustom;
-    unprofiledCustom.ItemId = 750000;
-    unprofiledCustom.ItemLevel = 80;
-    unprofiledCustom.RequiredLevel = 60;
+    // 4. Unprofiled custom item in a preserved range: no stat budget, left exactly as authored.
+    ItemTemplate unprofiledCosmetic;
+    unprofiledCosmetic.ItemId = 150000;
+    unprofiledCosmetic.ItemLevel = 80;
+    unprofiledCosmetic.RequiredLevel = 60;
 
-    ItemScalingContext ctxUnprofiledCustom = ItemScalingContext::Resolve(&unprofiledCustom);
-    EXPECT_FALSE(ctxUnprofiledCustom.hasGeneratedProfile);
-    EXPECT_EQ(ctxUnprofiledCustom.policy, ItemScalingPolicy::PRESERVE);
-    EXPECT_TRUE(ctxUnprofiledCustom.specialFlags & ITEM_SPECIAL_CUSTOM);
-    EXPECT_TRUE(ctxUnprofiledCustom.specialFlags & ITEM_SPECIAL_PRESERVE);
+    ItemScalingContext ctxUnprofiledCosmetic = ItemScalingContext::Resolve(&unprofiledCosmetic);
+    EXPECT_FALSE(ctxUnprofiledCosmetic.hasGeneratedProfile);
+    EXPECT_EQ(ctxUnprofiledCosmetic.policy, ItemScalingPolicy::PRESERVE);
+    EXPECT_TRUE(ctxUnprofiledCosmetic.specialFlags & ITEM_SPECIAL_CUSTOM);
+    EXPECT_TRUE(ctxUnprofiledCosmetic.specialFlags & ITEM_SPECIAL_PRESERVE);
 
-    ScaledItemBudget bUnprofiled = sItemBudgetScaler->CalculateItemBudget(&unprofiledCustom, layout, ctxUnprofiledCustom);
-    EXPECT_EQ(bUnprofiled.effectiveItemLevel, unprofiledCustom.ItemLevel);
-    EXPECT_FLOAT_EQ(bUnprofiled.statMultiplier, 1.0f);
+    ScaledItemBudget bUnprofiledCosmetic = sItemBudgetScaler->CalculateItemBudget(&unprofiledCosmetic, layout, ctxUnprofiledCosmetic);
+    EXPECT_EQ(bUnprofiledCosmetic.effectiveItemLevel, unprofiledCosmetic.ItemLevel);
+    EXPECT_FLOAT_EQ(bUnprofiledCosmetic.statMultiplier, 1.0f);
+
+    // 5. Unprofiled custom item in the gameplay range, above where that range used to stop: this is
+    // equipment with statistics - the Bloodforged and Heroic versions live here - and is scaled.
+    ItemTemplate unprofiledGameplay;
+    unprofiledGameplay.ItemId = 750000;
+    unprofiledGameplay.ItemLevel = 80;
+    unprofiledGameplay.RequiredLevel = 60;
+
+    ItemScalingContext ctxUnprofiledGameplay = ItemScalingContext::Resolve(&unprofiledGameplay);
+    EXPECT_FALSE(ctxUnprofiledGameplay.hasGeneratedProfile);
+    EXPECT_NE(ctxUnprofiledGameplay.policy, ItemScalingPolicy::PRESERVE);
+    EXPECT_TRUE(ctxUnprofiledGameplay.specialFlags & ITEM_SPECIAL_CUSTOM);
+    EXPECT_FALSE(ctxUnprofiledGameplay.specialFlags & ITEM_SPECIAL_PRESERVE);
 }
-
 
 TEST(ItemRuntimeAuthorityTest, MissingGeneratedProfileSafelyFallsBack)
 {
@@ -1385,7 +1397,6 @@ TEST(ItemRuntimeAuthorityTest, MissingGeneratedProfileSafelyFallsBack)
     EXPECT_LE(budget.effectiveRequiredLevel, 60u);
     EXPECT_LT(budget.effectiveItemLevel, 200u);
 }
-
 
 TEST(ItemRuntimeAuthorityTest, StockCap80IdentityPreserved)
 {
@@ -1877,5 +1888,3 @@ TEST(ProgressionRewardTest, ProgressionContext_ConstructionAndMetrics)
     EXPECT_FLOAT_EQ(ctx.progressionPosition, 0.7f);
     EXPECT_FLOAT_EQ(ctx.eraProgress, 0.7f);
 }
-
-

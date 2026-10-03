@@ -6,6 +6,7 @@
 #include "ItemBudgetScaler.h"
 #include "ContentPackRegistry.h"
 #include "GeneratedContentCensus.h"
+#include "GeneratedCustomRanges.h"
 #include "InstanceProfile.h"
 #include "ItemTemplate.h"
 #include "Log.h"
@@ -54,22 +55,27 @@ ItemScalingContext ItemScalingContext::Resolve(ItemTemplate const* proto)
         return ctx;
     }
 
-    // 2. Custom Item Safety Policy Fallback (for unprofiled custom items)
-    // custom_content.json is the single authoritative source of truth for custom classification.
-    // Unprofiled custom items receive safe fallback: CUSTOM_UNCLASSIFIED -> PRESERVE + warning.
-    if (proto->ItemId >= 100000)
+    // 2. Custom items, classified by the ranges data/content/overrides/custom_content.json names.
+    //
+    // That file called itself the authoritative source and only the census generator ever read it,
+    // which needs a database - so the runtime had nothing and preserved every custom item above
+    // 100000. On a realm whose own items outnumber the stock ones four to one that meant the pass
+    // skipped most of what players wear, the Bloodforged and Heroic versions included. The ranges
+    // are generated into a header now, so they stay in the file and the boundaries stay out of here.
+    if (GeneratedCustomRange const* range = FindGeneratedCustomRange(proto->ItemId))
     {
-        ctx.specialFlags |= (ITEM_SPECIAL_CUSTOM | ITEM_SPECIAL_PRESERVE);
+        ctx.specialFlags |= ITEM_SPECIAL_CUSTOM;
         ctx.sourceMap = 0;
-        ctx.era = ContentEra::Custom;
-        ctx.tier = ContentTier::WORLD;
-        ctx.policy = ItemScalingPolicy::PRESERVE;
 
-        LOG_WARN("server.loading", "UniversalContentScaling: Unprofiled custom item {} encountered; applying safe PRESERVE fallback.",
-            proto->ItemId);
-        return ctx;
+        if (static_cast<ItemScalingPolicy>(range->policy) == ItemScalingPolicy::PRESERVE)
+        {
+            ctx.specialFlags |= ITEM_SPECIAL_PRESERVE;
+            ctx.era = ContentEra::Custom;
+            ctx.tier = ContentTier::WORLD;
+            ctx.policy = ItemScalingPolicy::PRESERVE;
+            return ctx;
+        }
     }
-
     // 3. Fallback: Era resolution through registry
     EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForItem(
         proto->ItemId, proto->ItemLevel, proto->RequiredLevel);
