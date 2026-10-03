@@ -111,6 +111,12 @@ void CoAContentScaling::FinalizeAndInitialize()
     // 1. Finalize content pack registrations
     sContentPackRegistry->Finalize();
 
+    if (!_enabled)
+    {
+        UnregisterLocalLevelScalingHooks();
+        return;
+    }
+
     // 2. Compute immutable progression layout
     InitializeLayout();
 
@@ -444,7 +450,7 @@ namespace
 
 bool CoAContentScaling::CanPlayerEnterMap(Player const* player, uint32 mapId, uint8 difficulty) const
 {
-    if (!player || player->IsGameMaster())
+    if (!_enabled || !player || player->IsGameMaster())
         return true;
 
     if (IsRetrievingOwnCorpse(player, mapId))
@@ -627,6 +633,9 @@ void CoAContentScaling::OnPlayerLogout(Player* player)
 
 void CoAContentScaling::OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::LfgQueuePolicy& policy)
 {
+    if (!_enabled)
+        return;
+
     // A group queues under its own guid, not its leader's: LFGMgr calls AddQueueData with gguid
     // once the role check finishes. Asked with that, there are no player settings to find and no
     // player to count a party from, so the mode the leader picked was lost and every group was
@@ -837,7 +846,7 @@ std::vector<PendingInstanceScalePolicy> CoAContentScaling::GetAllPendingPolicies
 
 void CoAContentScaling::OnInstanceMapCreated(InstanceMap* instanceMap, Player* player)
 {
-    if (!instanceMap)
+    if (!_enabled || !instanceMap)
         return;
 
     uint32 const mapId = instanceMap->GetId();
@@ -1463,11 +1472,15 @@ namespace
 
         void OnPlayerLogin(Player* player) override
         {
+            if (!sCoAContentScaling->IsEnabled())
+                return;
             sCoAContentScaling->LoadPlayerLfgSettings(player);
         }
 
         void OnPlayerLogout(Player* player) override
         {
+            if (!sCoAContentScaling->IsEnabled())
+                return;
             sCoAContentScaling->OnPlayerLogout(player);
         }
     };

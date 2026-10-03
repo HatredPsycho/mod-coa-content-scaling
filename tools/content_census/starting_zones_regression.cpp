@@ -25,6 +25,12 @@ public:
     bool HandlesMap(uint32 map) const override { return map == 530; }
 };
 
+class QuestPack : public TbcPack
+{
+public:
+    bool HandlesQuest(uint32 quest) const override { return quest == 8325; }
+};
+
 int main()
 {
     auto* registry = sContentPackRegistry;
@@ -73,6 +79,22 @@ int main()
     registry->RegisterMapOverride(530, ContentEra::Custom);
     check(registry->ResolveEraForArea(3431, 530) == ContentEra::Custom, "area map override");
     check(registry->ResolveEraForCreature(15274, 530, 3431, 0, 1) == ContentEra::Custom, "map override");
+    registry->Clear();
+    registry->RegisterMapOverride(0, ContentEra::Custom);
+    check(registry->ResolveEraForCreature(30, 0, 12, 0, 5) == ContentEra::Custom, "Classic map override beats census");
+    registry->RegisterAreaOverride(12, ContentEra::WotLK);
+    check(registry->ResolveEraForCreature(30, 0, 12, 0, 5) == ContentEra::WotLK, "area override beats map override");
+    registry->RegisterCreatureOverride(30, ContentEra::TBC);
+    check(registry->ResolveEraForCreature(30, 0, 12, 0, 5) == ContentEra::TBC, "entry override beats area override");
+    registry->RegisterMapOverride(571, ContentEra::Custom);
+    check(FindGeneratedCreaturePlacement(385, 571) != nullptr, "Northrend census fixture exists");
+    check(registry->ResolveEraForCreature(385, 571, 0, 2, 70) == ContentEra::Custom, "Northrend map override beats census");
+    registry->Clear();
+    registry->RegisterPack(std::make_shared<QuestPack>());
+    registry->RegisterAreaOverride(3431, ContentEra::Custom);
+    check(registry->ResolveEraForQuest(8325, 3431, 0, 1) == ContentEra::Custom, "quest area override beats content pack");
+    registry->RegisterQuestOverride(8325, ContentEra::WotLK);
+    check(registry->ResolveEraForQuest(8325, 3431, 0, 1) == ContentEra::WotLK, "quest entry override beats area override");
     registry->Clear();
     std::cout << "Starting zone regression: " << failures << " failures\n";
     return failures ? 1 : 0;

@@ -42,11 +42,11 @@ ItemScalingContext ItemScalingContext::Resolve(ItemTemplate const* proto)
     if (!proto)
         return ctx;
 
-    // 1. Check generated census profile (Authoritative Source of Truth)
+    // 1. Retain generated source and safety metadata; resolve era through registry priorities.
     if (auto const* prof = FindGeneratedItemProfile(proto->ItemId))
     {
         ctx.hasGeneratedProfile = true;
-        ctx.era = prof->era;
+        ctx.era = sContentPackRegistry->ResolveEraForItem(proto->ItemId, proto->ItemLevel, proto->RequiredLevel);
         ctx.tier = prof->tier;
         ctx.sourceMap = prof->sourceMap;
         ctx.specialFlags = prof->specialFlags;

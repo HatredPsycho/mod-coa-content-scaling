@@ -179,11 +179,15 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForCreature(uint32 cre
             return EraResolutionResult{ait->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
     }
 
-    if (mapId == 530)
+    if (mapId != MAP_UNSPECIFIED)
     {
         auto const mapOverride = _mapOverrides.find(mapId);
         if (mapOverride != _mapOverrides.end())
             return EraResolutionResult{mapOverride->second, EraResolutionSource::ExplicitOverride, 1.0f};
+    }
+
+    if (mapId == 530)
+    {
         if (IsGeneratedStartingArea(areaId))
             return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
         if (areaId > 0)
@@ -254,7 +258,15 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForQuest(uint32 questI
     if (it != _questOverrides.end())
         return EraResolutionResult{it->second, EraResolutionSource::ExplicitOverride, 1.0f};
 
-    // Priority 2: Registered content pack ownership
+    // Priority 2: Explicit area override
+    if (zoneOrSort > 0)
+    {
+        auto const areaOverride = _areaOverrides.find(uint32(zoneOrSort));
+        if (areaOverride != _areaOverrides.end())
+            return EraResolutionResult{areaOverride->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
+    }
+
+    // Priority 3: Registered content pack ownership
     for (auto const& pack : _packs)
     {
         if (pack->HandlesQuest(questId))
@@ -263,9 +275,6 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForQuest(uint32 questI
 
     if (zoneOrSort > 0)
     {
-        auto const areaOverride = _areaOverrides.find(uint32(zoneOrSort));
-        if (areaOverride != _areaOverrides.end())
-            return EraResolutionResult{areaOverride->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
         if (IsGeneratedStartingArea(uint32(zoneOrSort)))
             return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
     }
