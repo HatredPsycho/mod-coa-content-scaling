@@ -174,8 +174,8 @@ uint8 CoAContentScaling::GetEffectiveCreatureLevel(CreatureTemplate const* cinfo
     uint32 const mapId = map ? map->GetId() : 0;
     uint32 const areaId = creature ? creature->GetAreaId() : 0;
 
-    ContentEra const era = sContentPackRegistry->ResolveEraForCreature(
-        cinfo->Entry, mapId, areaId, cinfo->expansion, authoredLevel);
+    ContentEra const era = _layout.ResolveContentEra(sContentPackRegistry->ResolveEraForCreature(
+        cinfo->Entry, mapId, areaId, cinfo->expansion, authoredLevel), authoredLevel);
 
     return _layout.MapAuthoredToEffective(era, authoredLevel);
 }
@@ -189,8 +189,9 @@ int32 CoAContentScaling::GetEffectiveQuestLevel(Quest const* quest) const
     if (authoredLevel <= 0)
         return authoredLevel;
 
-    ContentEra const era = sContentPackRegistry->ResolveEraForQuest(
-        quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(authoredLevel));
+    ContentEra const era = _layout.ResolveContentEra(sContentPackRegistry->ResolveEraForQuest(
+        quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(authoredLevel)),
+        static_cast<uint8>(authoredLevel));
 
     if (!_layout.IsEraEnabled(era))
         return 255; // Lock out quest from disabled expansion

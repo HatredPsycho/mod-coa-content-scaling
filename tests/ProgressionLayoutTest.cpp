@@ -1888,3 +1888,34 @@ TEST(ProgressionRewardTest, ProgressionContext_ConstructionAndMetrics)
     EXPECT_FLOAT_EQ(ctx.progressionPosition, 0.7f);
     EXPECT_FLOAT_EQ(ctx.eraProgress, 0.7f);
 }
+
+TEST(ProgressionCalibrationTest, StartingZonesShippedWithAnExpansionKeepTheirOwnLevel)
+{
+    // Eversong Woods and Azuremyst Isle are Burning Crusade content written for levels 1 to 20, so
+    // the expansion they shipped with says nothing about where they belong. Reading them as that
+    // expansion's content put a level 5 opponent at the floor of the TBC band.
+    ProgressionLayout layout = ProgressionLayout::Create(80, true, true);
+    std::string err;
+    ASSERT_TRUE(layout.Validate(err)) << err;
+
+    uint8 const tbcFloor = layout.GetEraRange(ContentEra::TBC).minLevel;
+
+    // What the defect did, and what the raw mapping still does when it is handed that era: the
+    // level falls below the band's own source range and lands on its floor.
+    EXPECT_EQ(layout.MapAuthoredToEffective(ContentEra::TBC, 5), tbcFloor);
+
+    EXPECT_EQ(layout.ResolveContentEra(ContentEra::TBC, 5), ContentEra::Classic);
+
+    uint8 const effUrchin = layout.MapAuthoredToEffective(layout.ResolveContentEra(ContentEra::TBC, 5), 5);
+    EXPECT_EQ(effUrchin, layout.MapAuthoredToEffective(ContentEra::Classic, 5));
+    EXPECT_LT(effUrchin, tbcFloor);
+
+    // Where the expansion's own progression starts, it stays that expansion's content.
+    EXPECT_EQ(layout.ResolveContentEra(ContentEra::TBC, 58), ContentEra::TBC);
+    EXPECT_EQ(layout.ResolveContentEra(ContentEra::WotLK, 70), ContentEra::WotLK);
+
+    // An entry requirement is not a content level: it keeps the era of the instance it guards, so
+    // Utgarde Keep's authored 65 still maps through Northrend rather than through Outland.
+    EXPECT_EQ(layout.MapAuthoredToEffective(ContentEra::WotLK, 65),
+        layout.GetEraRange(ContentEra::WotLK).minLevel);
+}

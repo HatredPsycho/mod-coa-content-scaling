@@ -179,6 +179,37 @@ bool ProgressionLayout::IsEraEnabled(ContentEra era) const
     }
 }
 
+LevelRange ProgressionLayout::CanonicalAuthoredRange(ContentEra era)
+{
+    switch (era)
+    {
+        case ContentEra::Classic:
+            return LevelRange{1, 60};
+        case ContentEra::TBC:
+            return LevelRange{58, 70};
+        case ContentEra::WotLK:
+            return LevelRange{68, 80};
+        default:
+            return LevelRange{0, 0};
+    }
+}
+
+// The era an expansion shipped a piece of content with says where its progression put it, not when
+// it was written: the Blood Elf and Draenei starting zones came with Burning Crusade and are meant
+// for levels 1 to 20. Mapping those through the Burning Crusade band lands them on its floor, which
+// is how a level 6 character came to meet a level 45 Wretched Urchin.
+//
+// Only content levels are read this way. An entry requirement is a gate on the instance it guards
+// and keeps the era of that instance, however far below its own progression the gate sits.
+ContentEra ProgressionLayout::ResolveContentEra(ContentEra taggedEra, uint8 authoredLevel) const
+{
+    LevelRange const canonical = CanonicalAuthoredRange(taggedEra);
+    if (!canonical.minLevel || authoredLevel >= canonical.minLevel)
+        return taggedEra;
+
+    return GetEraForAuthoredLevel(authoredLevel);
+}
+
 uint8 ProgressionLayout::MapAuthoredToEffective(ContentEra era, uint8 authoredLevel,
                                                uint8 sourceMin, uint8 sourceMax) const
 {
@@ -189,25 +220,9 @@ uint8 ProgressionLayout::MapAuthoredToEffective(ContentEra era, uint8 authoredLe
     // If sourceMin and sourceMax are unspecified, use canonical authored boundaries:
     if (sourceMin == 0 && sourceMax == 0)
     {
-        switch (era)
-        {
-            case ContentEra::Classic:
-                sourceMin = 1;
-                sourceMax = 60;
-                break;
-            case ContentEra::TBC:
-                sourceMin = 58;
-                sourceMax = 70;
-                break;
-            case ContentEra::WotLK:
-                sourceMin = 68;
-                sourceMax = 80;
-                break;
-            default:
-                sourceMin = targetRange.minLevel;
-                sourceMax = targetRange.maxLevel;
-                break;
-        }
+        LevelRange const canonical = CanonicalAuthoredRange(era);
+        sourceMin = canonical.minLevel ? canonical.minLevel : targetRange.minLevel;
+        sourceMax = canonical.maxLevel ? canonical.maxLevel : targetRange.maxLevel;
     }
 
     if (sourceMax <= sourceMin)

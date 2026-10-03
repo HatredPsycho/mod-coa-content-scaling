@@ -45,6 +45,9 @@ struct ProgressionLayout
 
     [[nodiscard]] LevelRange GetEraRange(ContentEra era) const;
 
+    [[nodiscard]] static LevelRange CanonicalAuthoredRange(ContentEra era);
+    [[nodiscard]] ContentEra ResolveContentEra(ContentEra taggedEra, uint8 authoredLevel) const;
+
     [[nodiscard]] bool IsEraEnabled(ContentEra era) const;
 
     [[nodiscard]] uint8 MapAuthoredToEffective(ContentEra era, uint8 authoredLevel,
