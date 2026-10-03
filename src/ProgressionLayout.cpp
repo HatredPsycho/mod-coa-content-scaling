@@ -181,12 +181,16 @@ bool ProgressionLayout::IsEraEnabled(ContentEra era) const
 
 // Every boundary, not only the cap: a realm that keeps cap 80 but moves a band is not the stock
 // layout, and reading it as one leaves its content unscaled.
+//
+// The boundaries are the ones Create lays out for a cap of 80, where the bands meet rather than
+// overlap. They are not the canonical authored spans, which do overlap at 58 and 68: those say
+// where an expansion's own content begins, this says where a character of that level stands.
 bool ProgressionLayout::IsStockIdentity() const
 {
     return maxLevel == 80 && tbcEnabled && wotlkEnabled &&
         classic.minLevel == 1 && classic.maxLevel == 60 &&
-        tbc.has_value() && tbc->minLevel == 58 && tbc->maxLevel == 70 &&
-        wotlk.has_value() && wotlk->minLevel == 68 && wotlk->maxLevel == 80;
+        tbc.has_value() && tbc->minLevel == 60 && tbc->maxLevel == 70 &&
+        wotlk.has_value() && wotlk->minLevel == 70 && wotlk->maxLevel == 80;
 }
 
 LevelRange ProgressionLayout::CanonicalAuthoredRange(ContentEra era)
