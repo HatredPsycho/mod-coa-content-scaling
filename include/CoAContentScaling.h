@@ -58,6 +58,9 @@ public:
     void FinalizeAndInitialize();
     void InitializeLayout();
 
+    // Rewrites the item templates, once the world has loaded them.
+    void ScaleItems();
+
     [[nodiscard]] bool IsEnabled() const { return _enabled; }
     [[nodiscard]] bool IsGroupScalingEnabled() const { return _groupScalingEnabled; }
     [[nodiscard]] bool IsAdaptiveMechanicsEnabled() const { return _adaptiveMechanicsEnabled; }

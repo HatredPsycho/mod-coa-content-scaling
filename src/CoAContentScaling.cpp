@@ -116,14 +116,21 @@ void CoAContentScaling::FinalizeAndInitialize()
     // 3. Load calibrated boss flex profiles
     sInstanceScalingMgr->LoadCalibratedBossFlex();
 
-    // 4. Scale item templates if enabled
-    if (sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::ScaleItems, true))
-    {
-        sItemBudgetScaler->ScaleAllItems(_layout);
-    }
+    // Item templates are not scaled here. This runs from OnLoadCustomDatabaseTable, which the world
+    // reaches about a hundred and fifty steps before LoadItemTemplates - the store is still empty,
+    // and the pass walked zero templates on every start since the module was written. ScaleItems()
+    // does it from OnStartup instead, once everything is loaded and before anyone can log in.
 
     LOG_INFO("server.loading", "CoAContentScaling: Finalized lifecycle and built immutable ProgressionLayout (Cap {})",
              _layout.maxLevel);
+}
+
+void CoAContentScaling::ScaleItems()
+{
+    if (!_enabled || !sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::ScaleItems, true))
+        return;
+
+    sItemBudgetScaler->ScaleAllItems(_layout);
 }
 
 void CoAContentScaling::InitializeLayout()
@@ -878,6 +885,13 @@ namespace
             }
 
             sCoAContentScaling->LoadConfig();
+        }
+
+        // Everything is loaded by the time this fires, and nobody can log in yet: the one point in
+        // the start where the item store exists and rewriting it is still invisible.
+        void OnStartup() override
+        {
+            sCoAContentScaling->ScaleItems();
         }
 
         void OnLoadCustomDatabaseTable() override
