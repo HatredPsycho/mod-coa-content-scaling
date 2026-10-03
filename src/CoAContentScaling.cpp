@@ -208,8 +208,9 @@ uint32 CoAContentScaling::GetEffectiveQuestMinLevel(Quest const* quest) const
     if (authoredMin <= 1)
         return authoredMin;
 
-    ContentEra const era = sContentPackRegistry->ResolveEraForQuest(
-        quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(authoredMin));
+    ContentEra const era = _layout.ResolveContentEra(sContentPackRegistry->ResolveEraForQuest(
+        quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(authoredMin)),
+        static_cast<uint8>(authoredMin));
 
     if (!_layout.IsEraEnabled(era))
         return 255; // Lock out quest from disabled expansion

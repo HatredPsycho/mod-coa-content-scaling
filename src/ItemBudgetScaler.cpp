@@ -187,26 +187,20 @@ ScaledItemBudget ItemBudgetScaler::CalculateItemBudget(ItemTemplate const* proto
         return budget;
 
     // 1. Required level scaling
+    //
+    // What an item asks of its wearer tracks where the item belongs, so it is read the same way a
+    // creature's or a quest's level is: an expansion's starting zone rewards gear for the levels it
+    // was written for, and reading that as the expansion's own content would hand a level 5 Blood
+    // Elf a reward they cannot put on.
     if (proto->RequiredLevel > 0)
     {
-        switch (ctx.era)
-        {
-            case ContentEra::Classic:
-                budget.effectiveRequiredLevel = layout.MapAuthoredToEffective(
-                    ContentEra::Classic, proto->RequiredLevel, 1, 60);
-                break;
-            case ContentEra::TBC:
-                budget.effectiveRequiredLevel = layout.MapAuthoredToEffective(
-                    ContentEra::TBC, proto->RequiredLevel, 58, 70);
-                break;
-            case ContentEra::WotLK:
-                budget.effectiveRequiredLevel = layout.MapAuthoredToEffective(
-                    ContentEra::WotLK, proto->RequiredLevel, 68, 80);
-                break;
-            default:
-                budget.effectiveRequiredLevel = std::min<uint32>(proto->RequiredLevel, layout.maxLevel);
-                break;
-        }
+        ContentEra const levelEra = layout.ResolveContentEra(ctx.era, static_cast<uint8>(proto->RequiredLevel));
+
+        if (ProgressionLayout::CanonicalAuthoredRange(levelEra).minLevel)
+            budget.effectiveRequiredLevel = layout.MapAuthoredToEffective(
+                levelEra, static_cast<uint8>(proto->RequiredLevel));
+        else
+            budget.effectiveRequiredLevel = std::min<uint32>(proto->RequiredLevel, layout.maxLevel);
     }
 
     budget.effectiveRequiredLevel = std::min<uint32>(budget.effectiveRequiredLevel, layout.maxLevel);
