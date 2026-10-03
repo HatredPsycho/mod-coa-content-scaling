@@ -942,6 +942,38 @@ namespace
                     return value > 0 ? std::max(1, scaled) : std::min(-1, scaled);
                 }, std::memory_order_relaxed);
 
+                // An enchantment, a gem and a socket bonus are all the same kind of entry and all
+                // ride on an item that was cut, so the host's factor is the one that applies.
+                LocalLevelScaling::ItemEnchantmentAmountOwner.store(
+                    [](uint32 hostItemEntry, uint32 enchantmentType, uint32 statType, uint32 amount) -> uint32
+                {
+                    if (!sCoAContentScaling->IsEnabled() ||
+                        !sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::ScaleEnchantments, true))
+                        return amount;
+
+                    float multiplier = 1.0f;
+                    switch (enchantmentType)
+                    {
+                        case ITEM_ENCHANTMENT_TYPE_STAT:
+                            multiplier = GetItemModCategory(statType) == ItemModCategory::SecondaryRating ?
+                                sItemBudgetScaler->GetRatingMultiplier(hostItemEntry) :
+                                sItemBudgetScaler->GetStatMultiplier(hostItemEntry);
+                            break;
+                        case ITEM_ENCHANTMENT_TYPE_DAMAGE:
+                        case ITEM_ENCHANTMENT_TYPE_RESISTANCE:
+                        case ITEM_ENCHANTMENT_TYPE_TOTEM:
+                            multiplier = sItemBudgetScaler->GetStatMultiplier(hostItemEntry);
+                            break;
+                        default:
+                            return amount;
+                    }
+
+                    if (multiplier >= 1.0f)
+                        return amount;
+
+                    return std::max<uint32>(1, static_cast<uint32>(std::lround(float(amount) * multiplier)));
+                }, std::memory_order_relaxed);
+
                 // Progression belongs to this module while it runs: the core stands down over the
                 // same three questions, so they are answered once, here.
                 LocalLevelScaling::QuestMoneyMaxLevelOwner.store([](Quest const* quest, uint32 defaultMoney) -> uint32
@@ -1011,6 +1043,7 @@ namespace
                 LocalLevelScaling::CreatureBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEffectValueOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::ItemEnchantmentAmountOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMoneyMaxLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::KillContentLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestRewardRateOwner.store(nullptr, std::memory_order_relaxed);

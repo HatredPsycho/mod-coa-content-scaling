@@ -111,6 +111,17 @@ CoAContentScaling.ScaleItems = 1
 CoAContentScaling.PublishAuraAmounts = 1
 
 #
+# CoAContentScaling.ScaleEnchantments
+#     Description: Cut the flat amounts an enchantment, a gem or a socket bonus adds by the same
+#                  factor as the item it sits on. An enchantment belongs to no item of its own, so
+#                  the host decides. Off leaves them at their authored values, which makes a
+#                  scaled-down character relatively stronger the better its enchants are.
+#     Default:     1 - Enabled
+#                  0 - Disabled
+#
+CoAContentScaling.ScaleEnchantments = 1
+
+#
 # CoAContentScaling.LFG.DefaultMode
 #     Description: Default composition mode for Dungeon Finder queues.
 #     Values:      Matchmaking  - Standard queue, waits for real players to fill all roles
