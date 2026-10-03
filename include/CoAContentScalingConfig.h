@@ -25,6 +25,7 @@ namespace CoAContentScalingConfigKeys
     inline constexpr char const* SoloAssistMode = "CoAContentScaling.SoloAssist.Mode";
     inline constexpr char const* RewardsScaleLootCount = "CoAContentScaling.Rewards.ScaleLootCount";
     inline constexpr char const* ScaleItems = "CoAContentScaling.ScaleItems";
+    inline constexpr char const* PublishAuraAmounts = "CoAContentScaling.PublishAuraAmounts";
     inline constexpr char const* LfgDefaultMode = "CoAContentScaling.LFG.DefaultMode";
     inline constexpr char const* LfgDefaultChallengeSize = "CoAContentScaling.LFG.DefaultChallengeSize";
     inline constexpr char const* Debug = "CoAContentScaling.Debug";

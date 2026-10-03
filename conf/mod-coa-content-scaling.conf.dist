@@ -100,6 +100,17 @@ CoAContentScaling.Rewards.ScaleLootCount = 1
 CoAContentScaling.ScaleItems = 1
 
 #
+# CoAContentScaling.PublishAuraAmounts
+#     Description: Send the amount an item-granted aura actually applies to the player's client, so
+#                  the CoAScaleTooltips addon can show it instead of the authored figure. The buff
+#                  tooltip is drawn from the client's own Spell.dbc and cannot be corrected without
+#                  this. Without the addon installed the messages are simply ignored.
+#     Default:     1 - Enabled
+#                  0 - Disabled
+#
+CoAContentScaling.PublishAuraAmounts = 1
+
+#
 # CoAContentScaling.LFG.DefaultMode
 #     Description: Default composition mode for Dungeon Finder queues.
 #     Values:      Matchmaking  - Standard queue, waits for real players to fill all roles

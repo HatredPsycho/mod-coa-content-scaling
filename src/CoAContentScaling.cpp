@@ -34,6 +34,7 @@
 #include "ProgressionRewardResolver.h"
 #include "QueryResult.h"
 #include "QuestDef.h"
+#include "ScaledAuraFeed.h"
 #include "ScriptMgr.h"
 #include "SoloAssistPolicy.h"
 #include "SpellAuraDefines.h"
@@ -586,6 +587,7 @@ void CoAContentScaling::OnPlayerLogout(Player* player)
         return;
 
     SavePlayerLfgSettings(player);
+    ScaledAuraFeed::Forget(player);
 
     ObjectGuid const guid = player->GetGUID();
     {
@@ -1257,29 +1259,26 @@ namespace
                 return;
 
             float multiplier = 1.0f;
-            switch (effect->GetAuraType())
+            switch (GetAuraAmountFactor(effect->GetAuraType()))
             {
-                case SPELL_AURA_MOD_STAT:
-                case SPELL_AURA_MOD_INCREASE_HEALTH:
-                case SPELL_AURA_MOD_DAMAGE_DONE:
-                case SPELL_AURA_MOD_HEALING_DONE:
-                case SPELL_AURA_MOD_ATTACK_POWER:
-                case SPELL_AURA_MOD_RANGED_ATTACK_POWER:
-                case SPELL_AURA_SCHOOL_ABSORB:
+                case ScaledAmountFactor::Stat:
                     multiplier = sItemBudgetScaler->GetStatMultiplier(castItem->GetEntry());
                     break;
-                case SPELL_AURA_MOD_RATING:
+                case ScaledAmountFactor::Rating:
                     multiplier = sItemBudgetScaler->GetRatingMultiplier(castItem->GetEntry());
                     break;
-                default:
+                case ScaledAmountFactor::None:
                     return;
             }
 
             if (multiplier >= 1.0f)
                 return;
 
+            int32 const authored = amount;
             int32 const scaled = static_cast<int32>(std::lround(float(amount) * multiplier));
             amount = amount > 0 ? std::max(1, scaled) : std::min(-1, scaled);
+
+            ScaledAuraFeed::Publish(player, aura->GetId(), effect->GetEffIndex(), authored, amount);
         }
 
         void OnUnitEnterCombat(Unit* unit, Unit* /*victim*/) override
@@ -1530,5 +1529,6 @@ void AddCoAContentScalingScripts()
     new coa_content_scaling_player();
     new coa_content_scaling_misc();
     new coa_content_scaling_map();
+    AddScaledAuraFeedScripts();
     AddCoAContentScalingCommands();
 }
