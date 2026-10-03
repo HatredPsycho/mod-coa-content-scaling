@@ -206,7 +206,7 @@ ScaledItemBudget ItemBudgetScaler::CalculateItemBudget(ItemTemplate const* proto
     budget.effectiveRequiredLevel = std::min<uint32>(budget.effectiveRequiredLevel, layout.maxLevel);
 
     // If realm cap is 80 and all eras active, stock budgets are valid identity
-    if (layout.maxLevel == 80 && layout.tbcEnabled && layout.wotlkEnabled)
+    if (layout.IsStockIdentity())
         return budget;
 
     // 2. Monotonic Power Bands for compressed realms driven by ContentTier

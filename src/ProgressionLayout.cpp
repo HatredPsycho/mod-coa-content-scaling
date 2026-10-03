@@ -179,6 +179,16 @@ bool ProgressionLayout::IsEraEnabled(ContentEra era) const
     }
 }
 
+// Every boundary, not only the cap: a realm that keeps cap 80 but moves a band is not the stock
+// layout, and reading it as one leaves its content unscaled.
+bool ProgressionLayout::IsStockIdentity() const
+{
+    return maxLevel == 80 && tbcEnabled && wotlkEnabled &&
+        classic.minLevel == 1 && classic.maxLevel == 60 &&
+        tbc.has_value() && tbc->minLevel == 58 && tbc->maxLevel == 70 &&
+        wotlk.has_value() && wotlk->minLevel == 68 && wotlk->maxLevel == 80;
+}
+
 LevelRange ProgressionLayout::CanonicalAuthoredRange(ContentEra era)
 {
     switch (era)

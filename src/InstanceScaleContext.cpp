@@ -152,6 +152,17 @@ InstanceScaleContext InstanceScalingMgr::GetContext(uint32 mapId, uint32 instanc
     return InstanceScaleContext{};
 }
 
+// Three tables are keyed by an instance and none of them was ever emptied, so a realm gathered one
+// entry per instance ever entered for as long as it ran.
+void InstanceScalingMgr::RemoveMapContext(uint32 mapId, uint32 instanceId)
+{
+    uint64 const key = (static_cast<uint64>(mapId) << 32) | instanceId;
+    std::lock_guard<std::mutex> lock(_lock);
+    _contexts.erase(key);
+    _challengeSizes.erase(key);
+    _compositionModes.erase(key);
+}
+
 EncounterScaleSnapshot InstanceScalingMgr::LockEncounterContext(Map* map, EncounterLifecycleSource source, EncounterKey key, EncounterHealthTransferPolicy hpPolicy)
 {
     uint32 const actualPlayers = CountActualPlayers(map);

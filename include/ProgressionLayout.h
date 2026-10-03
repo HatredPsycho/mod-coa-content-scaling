@@ -43,6 +43,8 @@ struct ProgressionLayout
 
     [[nodiscard]] bool Validate(std::string& outError) const;
 
+    [[nodiscard]] bool IsStockIdentity() const;
+
     [[nodiscard]] LevelRange GetEraRange(ContentEra era) const;
 
     [[nodiscard]] static LevelRange CanonicalAuthoredRange(ContentEra era);

@@ -111,12 +111,6 @@ void CoAContentScaling::FinalizeAndInitialize()
     // 1. Finalize content pack registrations
     sContentPackRegistry->Finalize();
 
-    if (!_enabled)
-    {
-        UnregisterLocalLevelScalingHooks();
-        return;
-    }
-
     // 2. Compute immutable progression layout
     InitializeLayout();
 
@@ -1023,7 +1017,7 @@ namespace
                         return defaultContent;
 
                     auto const& layout = sCoAContentScaling->GetLayout();
-                    if (layout.maxLevel == 80 && layout.tbcEnabled && layout.wotlkEnabled)
+                    if (layout.IsStockIdentity())
                         return defaultContent;
 
                     // The band follows the character, not the zone: a compressed realm would
@@ -1551,6 +1545,12 @@ namespace
         void OnPlayerLeaveAll(Map* map, Player* player) override
         {
             Rescale(map, player);
+        }
+
+        void OnDestroyMap(Map* map) override
+        {
+            if (map)
+                sInstanceScalingMgr->RemoveMapContext(map->GetId(), map->GetInstanceId());
         }
 
         void OnResolveEncounterMechanic(Map* map, uint32 encounterId, uint32 mechanicId, uint8 mechanicType, uint32 authoredValue, uint32& resolvedValue) override

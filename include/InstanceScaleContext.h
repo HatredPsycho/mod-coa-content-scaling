@@ -142,6 +142,7 @@ public:
     // Context management per instance map
     InstanceScaleContext GetOrCreateContext(Map* map);
     InstanceScaleContext GetContext(uint32 mapId, uint32 instanceId);
+    void RemoveMapContext(uint32 mapId, uint32 instanceId);
 
     // Count participants in map (actual physical human + bot players)
     uint32 CountActualPlayers(Map* map) const;
