@@ -24,6 +24,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 namespace
 {
@@ -32,6 +33,11 @@ constexpr char const* AddonPrefix = "CoAScale";
 // The shape the core's own AddonChannelCommandHandler uses: the client splits prefix from body on
 // the first tab.
 constexpr char Separator = '\t';
+
+// SMSG_MESSAGECHAT carries the body as a null terminated string, but the client's own addon channel
+// is held to a far smaller line, so a compact budget keeps an item's whole chain in one message.
+constexpr std::size_t MaximumBody = 200;
+constexpr uint8 MaximumTriggerDepth = 3;
 
 // An aura amount is recalculated whenever anything it reads changes, so a single fight would spend
 // dozens of messages restating a number the client already holds. What was last sent is remembered
@@ -85,6 +91,74 @@ void AuthoredRange(SpellEffectInfo const& effect, int32& minimum, int32& maximum
     }
 }
 
+// An item's own spell is often only the aura that watches for the proc; the figure the tooltip
+// prints lives in what that aura sets off, which the sentence reaches across. So the chain is
+// followed. Where a hop is made by a script rather than written in the spell's data there is
+// nothing here to follow, and those amounts stay as they were authored.
+void CollectSpellAmounts(uint32 spellId, float statMultiplier, float ratingMultiplier,
+    std::unordered_set<uint32>& visited, uint8 depth, std::string& body)
+{
+    if (!spellId || depth > MaximumTriggerDepth || body.size() > MaximumBody)
+        return;
+
+    if (!visited.insert(spellId).second)
+        return;
+
+    SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
+    if (!spellInfo)
+        return;
+
+    for (uint8 index = 0; index < MAX_SPELL_EFFECTS; ++index)
+    {
+        SpellEffectInfo const& effect = spellInfo->Effects[index];
+        if (!effect.Effect)
+            continue;
+
+        CollectSpellAmounts(effect.TriggerSpell, statMultiplier, ratingMultiplier, visited, depth + 1, body);
+
+        if (effect.RealPointsPerLevel != 0.0f)
+            continue;
+
+        ScaledAmountFactor const factor = effect.Effect == SPELL_EFFECT_APPLY_AURA ?
+            GetAuraAmountFactor(effect.ApplyAuraName) : GetSpellEffectAmountFactor(effect.Effect);
+
+        float multiplier = 1.0f;
+        switch (factor)
+        {
+            case ScaledAmountFactor::Stat:
+                multiplier = statMultiplier;
+                break;
+            case ScaledAmountFactor::Rating:
+                multiplier = ratingMultiplier;
+                break;
+            case ScaledAmountFactor::None:
+                continue;
+        }
+
+        if (multiplier >= 1.0f)
+            continue;
+
+        int32 authoredMinimum = 0;
+        int32 authoredMaximum = 0;
+        AuthoredRange(effect, authoredMinimum, authoredMaximum);
+        if (!authoredMinimum && !authoredMaximum)
+            continue;
+
+        std::string const row = std::to_string(authoredMinimum) + ',' + std::to_string(ScaleAmount(authoredMinimum, multiplier)) +
+            ',' + std::to_string(authoredMaximum) + ',' + std::to_string(ScaleAmount(authoredMaximum, multiplier));
+
+        if (body.find(row) != std::string::npos)
+            continue;
+
+        if (body.size() + row.size() + 1 > MaximumBody)
+            return;
+
+        if (!body.empty())
+            body += ';';
+        body += row;
+    }
+}
+
 // Anything whose value moves with the caster's level is left out: the client computes those from the
 // reader's own level and the server cannot say in advance what it printed. Nothing is sent for them,
 // so the addon leaves the line as it found it instead of putting a wrong number in its place.
@@ -97,54 +171,11 @@ std::string DescribeItemEffects(ItemTemplate const* proto)
 
     std::string body;
 
+    std::unordered_set<uint32> visited;
+
     for (uint8 spellSlot = 0; spellSlot < MAX_ITEM_PROTO_SPELLS; ++spellSlot)
-    {
-        uint32 const spellId = uint32(proto->Spells[spellSlot].SpellId);
-        if (!spellId)
-            continue;
-
-        SpellInfo const* spellInfo = sSpellMgr->GetSpellInfo(spellId);
-        if (!spellInfo)
-            continue;
-
-        for (uint8 index = 0; index < MAX_SPELL_EFFECTS; ++index)
-        {
-            SpellEffectInfo const& effect = spellInfo->Effects[index];
-            if (!effect.Effect || effect.RealPointsPerLevel != 0.0f)
-                continue;
-
-            ScaledAmountFactor const factor = effect.Effect == SPELL_EFFECT_APPLY_AURA ?
-                GetAuraAmountFactor(effect.ApplyAuraName) : GetSpellEffectAmountFactor(effect.Effect);
-
-            float multiplier = 1.0f;
-            switch (factor)
-            {
-                case ScaledAmountFactor::Stat:
-                    multiplier = statMultiplier;
-                    break;
-                case ScaledAmountFactor::Rating:
-                    multiplier = ratingMultiplier;
-                    break;
-                case ScaledAmountFactor::None:
-                    continue;
-            }
-
-            if (multiplier >= 1.0f)
-                continue;
-
-            int32 authoredMinimum = 0;
-            int32 authoredMaximum = 0;
-            AuthoredRange(effect, authoredMinimum, authoredMaximum);
-            if (!authoredMinimum && !authoredMaximum)
-                continue;
-
-            if (!body.empty())
-                body += ';';
-
-            body += std::to_string(authoredMinimum) + ',' + std::to_string(ScaleAmount(authoredMinimum, multiplier)) +
-                ',' + std::to_string(authoredMaximum) + ',' + std::to_string(ScaleAmount(authoredMaximum, multiplier));
-        }
-    }
+        CollectSpellAmounts(uint32(proto->Spells[spellSlot].SpellId), statMultiplier, ratingMultiplier,
+            visited, 0, body);
 
     return body;
 }
