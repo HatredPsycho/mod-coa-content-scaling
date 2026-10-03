@@ -20,6 +20,30 @@ import subprocess
 from pathlib import Path
 from collections import defaultdict
 
+STARTING_ZONES = frozenset((3430, 3431, 3433, 3487, 3524, 3525, 3526, 3557, 10141, 10142))
+
+def is_starting_area(area_id, areas):
+    visited = set()
+    while area_id and area_id not in visited:
+        if area_id in STARTING_ZONES:
+            return True
+        visited.add(area_id)
+        area_id = areas.get(area_id, {}).get("parent_zone", 0)
+    return False
+
+def placement_era(map_id, area_ids, areas, authored_expansion, max_level, map_expansion):
+    if map_id == 530:
+        known = [area for area in area_ids if area]
+        if known and all(is_starting_area(area, areas) for area in known):
+            return "Classic"
+        if not known and authored_expansion == 0 and max_level <= 20:
+            return "Classic"
+    if map_expansion == 1 or map_id == 530:
+        return "TBC"
+    if map_expansion == 2 or map_id == 571:
+        return "WotLK"
+    return "Classic"
+
 def compute_sha256(filepath):
     p = Path(filepath)
     if not p.is_file():
@@ -358,13 +382,17 @@ def main():
     print(f"Classified {len(all_map_profiles)} maps. Excluded {len(excluded_pvp_maps)} PvP maps from PvE registry. Generated {len(pve_instance_profiles)} PvE instance variants.")
 
     print("=== Step 5: Creature Spawns & Placement-Aware Profiles ===")
-    spawn_rows = run_query(cmd_base, f"SELECT id, map FROM {world_db}.creature GROUP BY id, map;")
+    spawn_rows = run_query(cmd_base, f"SELECT c.id, c.map, c.zoneId, c.areaId, ct.exp, ct.maxlevel FROM {world_db}.creature c JOIN {world_db}.creature_template ct ON ct.entry = c.id GROUP BY c.id, c.map, c.zoneId, c.areaId, ct.exp, ct.maxlevel;")
     creature_placements = []
     entry_maps = defaultdict(set)
+    placement_areas = defaultdict(set)
+    placement_levels = {}
     for r in spawn_rows:
         c_entry = int(r[0])
         c_map = int(r[1])
         entry_maps[c_entry].add(c_map)
+        placement_areas[(c_entry, c_map)].add(int(r[3]) or int(r[2]))
+        placement_levels[c_entry] = (int(r[4]), int(r[5]))
 
     # Full production coverage: 100% of spawned creature entries across all active maps
     sample_creatures = sorted(entry_maps.keys())
@@ -372,13 +400,11 @@ def main():
         maps_present = entry_maps[c_entry]
         for m_id in sorted(maps_present):
             m_info = dbc_maps.get(m_id, {"expansion_id": 0})
-            c_era = "Classic"
+            expansion, max_level = placement_levels[c_entry]
+            c_era = placement_era(m_id, placement_areas[(c_entry, m_id)], dbc_areas,
+                                  expansion, max_level, m_info["expansion_id"])
             if m_id in reused_ov:
                 c_era = reused_ov[m_id]["era"]
-            elif m_info["expansion_id"] == 1 or m_id == 530:
-                c_era = "TBC"
-            elif m_info["expansion_id"] == 2 or m_id == 571:
-                c_era = "WotLK"
             confidence = 100 if len(maps_present) == 1 else 85
             creature_placements.append({
                 "entry": c_entry,
@@ -409,7 +435,9 @@ def main():
             era = "WotLK"
         elif sort > 0 and sort in dbc_areas:
             map_of_area = dbc_areas[sort]["map_id"]
-            if map_of_area == 530:
+            if is_starting_area(sort, dbc_areas):
+                era = "Classic"
+            elif map_of_area == 530:
                 era = "TBC"
             elif map_of_area == 571:
                 era = "WotLK"
@@ -453,6 +481,7 @@ def main():
 
     # Map PvE instance profiles by (map_id, difficulty)
     inst_profiles_by_key = {(ip["map_id"], ip["difficulty"]): ip for ip in pve_instance_profiles}
+    creature_eras = {(p["entry"], p["map_id"]): p["era"] for p in creature_placements}
     maps_in_pve = set(ip["map_id"] for ip in pve_instance_profiles)
 
     # loot_to_sources: loot_entry -> set of (map_id, difficulty, is_boss, confidence)
@@ -475,14 +504,15 @@ def main():
 
         for m in maps:
             conf = 100 if m in maps_in_pve else 50
+            source_era = creature_eras.get((entry, m), "TBC") if m == 530 else ("WotLK" if m == 571 else "Classic")
             # Base entry = difficulty 0
-            loot_to_sources[entry].add((m, 0, is_boss, conf))
+            loot_to_sources[entry].add((m, 0, is_boss, conf, source_era))
             if lootid > 0:
-                loot_to_sources[lootid].add((m, 0, is_boss, conf))
+                loot_to_sources[lootid].add((m, 0, is_boss, conf, source_era))
             # Child difficulty entries (Heroic / 25-man / etc.)
             for idx, d in enumerate(diffs):
                 if d > 0:
-                    loot_to_sources[d].add((m, idx + 1, is_boss, conf))
+                    loot_to_sources[d].add((m, idx + 1, is_boss, conf, source_era))
 
     # Query creature loot entries to map item -> drop sources
     clt_all = run_query(cmd_base, f"SELECT item, entry FROM {world_db}.creature_loot_template WHERE item > 0;")
@@ -511,10 +541,10 @@ def main():
     }
 
     def candidate_priority_key(cand):
-        m, d, is_boss, conf = cand
+        m, d, is_boss, conf, source_era = cand
         inst = inst_profiles_by_key.get((m, d)) or inst_profiles_by_key.get((m, 0))
         tier = inst["tier"] if inst else "WORLD"
-        era = inst["era"] if inst else ("TBC" if m == 530 else ("WotLK" if m == 571 else "Classic"))
+        era = inst["era"] if inst else source_era
         return (
             1 if is_boss else 0,
             conf,
@@ -612,7 +642,7 @@ def main():
             if sources:
                 sorted_cands = sorted(sources, key=candidate_priority_key, reverse=True)
                 chosen = sorted_cands[0]
-                source_map, diff, is_boss, conf = chosen
+                source_map, diff, is_boss, conf, source_era = chosen
 
                 # Track multi-source conflicts if multiple distinct instance candidates exist
                 inst_cands = [s for s in sources if s[0] not in (0, 1, 530, 571)]
@@ -632,14 +662,8 @@ def main():
                 if inst:
                     era = inst["era"]
                     tier = inst["tier"]
-                elif source_map in (530,):
-                    era = "TBC"
-                    tier = "WORLD"
-                elif source_map in (571,):
-                    era = "WotLK"
-                    tier = "WORLD"
                 else:
-                    era = "Classic"
+                    era = source_era
                     tier = "WORLD"
             else:
                 source_map = 0
@@ -897,6 +921,7 @@ def main():
 
     print("=== Step 10: Generating C++ constexpr Tables in include/GeneratedContentCensus.h ===")
     cpp_header_path = output_dir / "include/GeneratedContentCensus.h"
+    cpp_header_path.parent.mkdir(parents=True, exist_ok=True)
     with open(cpp_header_path, "w", encoding="utf-8") as f:
         f.write("""/*
  * CoA Universal Content Scaling
@@ -989,6 +1014,13 @@ struct GeneratedAccessProfile
 // ============================================================================
 
 """)
+        starting_areas = sorted(area for area in dbc_areas if is_starting_area(area, dbc_areas))
+        f.write(f"inline constexpr std::array<uint32, {len(starting_areas)}> sGeneratedStartingAreas =\n{{\n")
+        for area in starting_areas:
+            f.write(f"    {area},\n")
+        f.write("};\n\n")
+        f.write("inline bool IsGeneratedStartingArea(uint32 areaId)\n{\n    return std::binary_search(sGeneratedStartingAreas.begin(), sGeneratedStartingAreas.end(), areaId);\n}\n\n")
+
         # Maps
         f.write(f"inline constexpr std::array<GeneratedMapProfile, {len(all_map_profiles)}> sGeneratedMapProfiles =\n{{\n")
         for m in sorted(all_map_profiles, key=lambda x: x["map_id"]):

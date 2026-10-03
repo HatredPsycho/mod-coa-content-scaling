@@ -136,6 +136,13 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForArea(uint32 areaId,
     if (it != _areaOverrides.end())
         return EraResolutionResult{it->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
 
+    auto const mapOverride = _mapOverrides.find(mapId);
+    if (mapOverride != _mapOverrides.end())
+        return EraResolutionResult{mapOverride->second, EraResolutionSource::ExplicitOverride, 1.0f};
+
+    if ((mapId == 530 || mapId == MAP_UNSPECIFIED) && IsGeneratedStartingArea(areaId))
+        return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
+
     // 2. Query registered content packs
     for (auto const& pack : _packs)
     {
@@ -170,6 +177,17 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForCreature(uint32 cre
         auto ait = _areaOverrides.find(areaId);
         if (ait != _areaOverrides.end())
             return EraResolutionResult{ait->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
+    }
+
+    if (mapId == 530)
+    {
+        auto const mapOverride = _mapOverrides.find(mapId);
+        if (mapOverride != _mapOverrides.end())
+            return EraResolutionResult{mapOverride->second, EraResolutionSource::ExplicitOverride, 1.0f};
+        if (IsGeneratedStartingArea(areaId))
+            return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
+        if (areaId > 0)
+            return ResolveEraDetailsForArea(areaId, mapId, authoredExpansion);
     }
 
     // Priority 2.5: Placement-Aware Generated Creature Census Profile
@@ -243,18 +261,19 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForQuest(uint32 questI
             return EraResolutionResult{pack->GetEra(), EraResolutionSource::ContentPack, 1.0f};
     }
 
+    if (zoneOrSort > 0)
+    {
+        auto const areaOverride = _areaOverrides.find(uint32(zoneOrSort));
+        if (areaOverride != _areaOverrides.end())
+            return EraResolutionResult{areaOverride->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
+        if (IsGeneratedStartingArea(uint32(zoneOrSort)))
+            return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
+    }
+
     // Priority 2.5: Generated Quest Census Profile
     if (auto const* gq = FindGeneratedQuestProfile(questId))
     {
         return EraResolutionResult{gq->era, EraResolutionSource::ContentCensus, static_cast<float>(gq->confidence) / 100.0f};
-    }
-
-    // Priority 3: Zone/Sort explicit area override
-    if (zoneOrSort > 0)
-    {
-        auto ait = _areaOverrides.find(uint32(zoneOrSort));
-        if (ait != _areaOverrides.end())
-            return EraResolutionResult{ait->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
     }
 
     // Priority 4: Authored expansion metadata
@@ -266,8 +285,7 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForQuest(uint32 questI
     // Priority 5: Zone/sort metadata
     // Canonical Outland zones
     if (zoneOrSort == 3483 || zoneOrSort == 3518 || zoneOrSort == 3519 || zoneOrSort == 3520 ||
-        zoneOrSort == 3521 || zoneOrSort == 3522 || zoneOrSort == 3523 || zoneOrSort == 3430 ||
-        zoneOrSort == 3433 || zoneOrSort == 3526 || zoneOrSort == 3524 || zoneOrSort == 3525)
+        zoneOrSort == 3521 || zoneOrSort == 3522 || zoneOrSort == 3523)
     {
         return EraResolutionResult{ContentEra::TBC, EraResolutionSource::ZoneSortMetadata, 0.90f};
     }
