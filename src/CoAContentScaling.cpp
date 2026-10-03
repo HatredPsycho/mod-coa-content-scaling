@@ -976,6 +976,20 @@ namespace
                     return std::max<uint32>(1, static_cast<uint32>(std::lround(float(amount) * multiplier)));
                 }, std::memory_order_relaxed);
 
+                // An enchantment carries no era of its own, but the level it asks for names one: a
+                // gem that wants 80 is Northrend's. Read that way it moves with the items it goes
+                // into, instead of staying out of reach of everyone on a realm that ends below it.
+                LocalLevelScaling::EnchantmentRequiredLevelOwner.store([](uint32 requiredLevel) -> uint32
+                {
+                    if (!sCoAContentScaling->IsEnabled())
+                        return requiredLevel;
+
+                    ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
+                    uint8 const authored = static_cast<uint8>(std::min<uint32>(requiredLevel, 255));
+
+                    return layout.MapAuthoredToEffective(layout.GetEraForAuthoredLevel(authored), authored);
+                }, std::memory_order_relaxed);
+
                 // Progression belongs to this module while it runs: the core stands down over the
                 // same three questions, so they are answered once, here.
                 LocalLevelScaling::QuestMoneyMaxLevelOwner.store([](Quest const* quest, uint32 defaultMoney) -> uint32
@@ -1046,6 +1060,7 @@ namespace
                 LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEffectValueOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEnchantmentAmountOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::EnchantmentRequiredLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMoneyMaxLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::KillContentLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestRewardRateOwner.store(nullptr, std::memory_order_relaxed);
