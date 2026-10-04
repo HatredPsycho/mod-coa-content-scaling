@@ -1103,25 +1103,20 @@ namespace
                 return;
             }
 
-            // Compute effective min and max levels
+            // Compute the effective level at which this dungeon opens
             auto const& layout = sCoAContentScaling->GetLayout();
             uint8 const effMin = layout.MapAuthoredToEffective(lfgProf->era, lfgProf->authoredMin);
-            uint8 const effMax = layout.MapAuthoredToEffective(lfgProf->era, lfgProf->authoredMax);
             uint8 const playerLevel = player->GetLevel();
 
             if (playerLevel < effMin)
             {
                 lockData = lfg::LFG_LOCKSTATUS_TOO_LOW_LEVEL;
             }
-            else if (playerLevel > effMax)
+            // Scaled content rises to whoever enters it, so there is no upper level that locks a
+            // dungeon out of the finder. Only the entry level still applies.
+            else if (lockData == lfg::LFG_LOCKSTATUS_TOO_LOW_LEVEL || lockData == lfg::LFG_LOCKSTATUS_TOO_HIGH_LEVEL)
             {
-                lockData = lfg::LFG_LOCKSTATUS_TOO_HIGH_LEVEL;
-            }
-            else
-            {
-                // If level requirement is satisfied under effective progression, clear level locks
-                if (lockData == lfg::LFG_LOCKSTATUS_TOO_LOW_LEVEL || lockData == lfg::LFG_LOCKSTATUS_TOO_HIGH_LEVEL)
-                    lockData = 0;
+                lockData = 0;
             }
         }
 
