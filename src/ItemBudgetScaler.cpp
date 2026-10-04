@@ -4,6 +4,7 @@
  */
 
 #include "ItemBudgetScaler.h"
+#include "LocalLevelScaling.h"
 #include "ContentPackRegistry.h"
 #include "GeneratedContentCensus.h"
 #include "GeneratedCustomRanges.h"
@@ -41,6 +42,17 @@ ItemScalingContext ItemScalingContext::Resolve(ItemTemplate const* proto)
     ItemScalingContext ctx;
     if (!proto)
         return ctx;
+
+    // 0. A catalog that ships one item per level has already answered the question this pass asks,
+    // and the module that owns those entries says so itself. Rewriting them applies the band twice.
+    if (LocalLevelScaling::IsLevelResolvedItem(proto->ItemId))
+    {
+        ctx.specialFlags |= ITEM_SPECIAL_CUSTOM | ITEM_SPECIAL_PRESERVE;
+        ctx.era = ContentEra::Custom;
+        ctx.tier = ContentTier::WORLD;
+        ctx.policy = ItemScalingPolicy::PRESERVE;
+        return ctx;
+    }
 
     // 1. Retain generated source and safety metadata; resolve era through registry priorities.
     if (auto const* prof = FindGeneratedItemProfile(proto->ItemId))
