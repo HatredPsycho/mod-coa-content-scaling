@@ -218,6 +218,22 @@ uint32 CoAContentScaling::GetEffectiveQuestMinLevel(Quest const* quest) const
     return static_cast<uint32>(_layout.MapAuthoredToEffective(era, static_cast<uint8>(authoredMin)));
 }
 
+uint8 CoAContentScaling::GetEffectiveAbilityRequiredLevel(uint8 authoredLevel) const
+{
+    if (!_enabled || authoredLevel <= 1)
+        return authoredLevel;
+
+    // An ability carries no zone and no expansion field, so its own level is the only thing that
+    // says where its progression put it - the same last resort the quest and item paths fall back on.
+    ContentEra const era = _layout.GetEraForAuthoredLevel(authoredLevel);
+    if (!_layout.IsEraEnabled(era))
+        return authoredLevel;
+
+    // Never further out of reach than it was authored: a layout that leaves an era where it stands
+    // must not turn a reachable rank into an unreachable one.
+    return std::min(authoredLevel, _layout.MapAuthoredToEffective(era, authoredLevel));
+}
+
 CalculatedCombatBudget CoAContentScaling::CalculateCreatureBudget(CreatureTemplate const* cinfo, Creature* creature,
                                                                  CreatureScaleContext* outContext) const
 {
@@ -920,6 +936,11 @@ namespace
                     return sCoAContentScaling->GetEffectiveQuestMinLevel(quest);
                 }, std::memory_order_relaxed);
 
+                LocalLevelScaling::AbilityRequiredLevelOwner.store([](uint8 requiredLevel) -> uint8
+                {
+                    return sCoAContentScaling->GetEffectiveAbilityRequiredLevel(requiredLevel);
+                }, std::memory_order_relaxed);
+
                 LocalLevelScaling::CreatureBaseLevelOwner.store([](CreatureTemplate const* cinfo, Creature const* creature) -> uint8
                 {
                     return sCoAContentScaling->GetEffectiveCreatureLevel(cinfo, creature, cinfo ? cinfo->maxlevel : 1);
@@ -1059,6 +1080,7 @@ namespace
             {
                 LocalLevelScaling::QuestBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::AbilityRequiredLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEffectValueOwner.store(nullptr, std::memory_order_relaxed);

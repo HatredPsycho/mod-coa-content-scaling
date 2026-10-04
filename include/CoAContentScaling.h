@@ -80,6 +80,7 @@ public:
     [[nodiscard]] uint8 GetEffectiveCreatureLevel(CreatureTemplate const* cinfo, Creature const* creature, uint8 authoredLevel) const;
     [[nodiscard]] int32 GetEffectiveQuestLevel(Quest const* quest) const;
     [[nodiscard]] uint32 GetEffectiveQuestMinLevel(Quest const* quest) const;
+    [[nodiscard]] uint8 GetEffectiveAbilityRequiredLevel(uint8 authoredLevel) const;
 
     // One source of truth for what a creature is worth: the same context, group scale and
     // calibrated boss profile the spawn path applies, so a report cannot drift from reality.
