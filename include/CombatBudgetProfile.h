@@ -12,6 +12,10 @@
 #include "Define.h"
 
 class Creature;
+
+// Scaling a creature's health leaves the player damage requirement it was given at its old size. Cut
+// below half, the creature asks for more damage than it has health, and the kill pays nothing.
+void RescaleLootDamageRequirement(Creature* creature, uint32 previousMaxHealth);
 struct CreatureTemplate;
 
 struct CalculatedCombatBudget

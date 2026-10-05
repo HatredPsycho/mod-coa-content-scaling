@@ -211,6 +211,10 @@ public:
     ScaledItemBudget CalculateItemBudget(ItemTemplate const* proto, ProgressionLayout const& layout,
                                          ItemScalingContext const& context) const;
 
+    // The average item level an instance asks for, in the item levels this realm's gear now carries.
+    [[nodiscard]] uint32 ScaleRequiredAverageItemLevel(uint32 authoredItemLevel, ContentEra era,
+                                                       ProgressionLayout const& layout) const;
+
     // Apply scaled budget onto ItemTemplate in-memory (called post ObjectMgr load)
     void ScaleItemTemplate(ItemTemplate* proto, ProgressionLayout const& layout) const;
 

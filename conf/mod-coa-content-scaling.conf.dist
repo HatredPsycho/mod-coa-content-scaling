@@ -84,6 +84,30 @@ CoAContentScaling.AdaptiveMechanics.Enable = 1
 CoAContentScaling.SoloAssist.Mode = None
 
 #
+# CoAContentScaling.Difficulty.DamageMultiplier
+#     Description: Damage dungeon and raid enemies deal to players and their pets, after group
+#                  scaling and solo assist. Melee, direct spells and periodic damage; instant kills
+#                  and percentage-of-health mechanics keep their size. Requires GroupScaling.Enable.
+#                  Reloadable with .reload config.
+#     Range:       0.25 to 2.0 - lower is easier
+#     Default:     1.0 - unchanged
+#
+CoAContentScaling.Difficulty.DamageMultiplier = 1.0
+
+#
+# CoAContentScaling.World.Leech.Enable
+# CoAContentScaling.World.Leech.Percent
+#     Description: Players heal themselves for a share of the damage they deal to creatures in the
+#                  open world: melee, spells and periodic damage, after mitigation and never more
+#                  than the creature had left. Not in instances or battlegrounds, not against players
+#                  or their pets. Independent of group scaling. Reloadable with .reload config.
+#     Range:       Percent 0 to 100
+#     Default:     0 - Disabled, 5.0 percent once enabled
+#
+CoAContentScaling.World.Leech.Enable = 0
+CoAContentScaling.World.Leech.Percent = 5.0
+
+#
 # CoAContentScaling.Rewards.ScaleLootCount
 #     Description: Scale dropped item count with group size (guaranteeing at least 1 drop).
 #     Default:     1 - Enabled

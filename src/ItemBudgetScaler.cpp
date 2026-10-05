@@ -14,6 +14,7 @@
 #include "ObjectMgr.h"
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace
 {
@@ -34,6 +35,81 @@ namespace
 
         float const t = float(authoredIlvl - band.authMin) / float(std::max<uint32>(1, band.authMax - band.authMin));
         return band.effMin + static_cast<uint32>(std::round(t * float(band.effMax - band.effMin)));
+    }
+
+    // Where each tier's authored item levels land on a compressed realm. Classic only moves when its
+    // range is shorter than the 60 levels it was written for.
+    std::optional<PowerBandMapping> PowerBand(ContentEra era, ContentTier tier, ProgressionLayout const& layout)
+    {
+        if (era == ContentEra::Classic)
+        {
+            LevelRange const& cr = layout.classic;
+            if (cr.maxLevel >= 60)
+                return std::nullopt;
+
+            switch (tier)
+            {
+                case ContentTier::WORLD:
+                case ContentTier::DUNGEON_NORMAL:
+                    return PowerBandMapping{ 1, 60, 1, cr.maxLevel };
+                case ContentTier::DUNGEON_HEROIC:
+                case ContentTier::RAID_ENTRY: // MC, Onyxia, ZG
+                    return PowerBandMapping{ 61, 68, uint32(cr.maxLevel + 1), uint32(cr.maxLevel + 6) };
+                case ContentTier::RAID_MID: // BWL
+                    return PowerBandMapping{ 69, 75, uint32(cr.maxLevel + 7), uint32(cr.maxLevel + 13) };
+                case ContentTier::RAID_END: // AQ40
+                    return PowerBandMapping{ 76, 83, uint32(cr.maxLevel + 14), uint32(cr.maxLevel + 19) };
+                case ContentTier::RAID_PINNACLE: // Naxx40
+                default:
+                    return PowerBandMapping{ 84, 92, uint32(cr.maxLevel + 20), uint32(cr.maxLevel + 25) };
+            }
+        }
+
+        if (era == ContentEra::TBC && layout.tbc.has_value())
+        {
+            LevelRange const& tr = *layout.tbc;
+            switch (tier)
+            {
+                case ContentTier::WORLD:
+                case ContentTier::DUNGEON_NORMAL:
+                    return PowerBandMapping{ 85, 115, tr.minLevel, tr.maxLevel };
+                case ContentTier::DUNGEON_HEROIC:
+                    return PowerBandMapping{ 115, 120, uint32(tr.maxLevel + 1), uint32(tr.maxLevel + 3) };
+                case ContentTier::RAID_ENTRY: // Karazhan, Gruul, Magtheridon (T4)
+                    return PowerBandMapping{ 121, 128, uint32(tr.maxLevel + 4), uint32(tr.maxLevel + 8) };
+                case ContentTier::RAID_MID: // SSC, TK (T5)
+                    return PowerBandMapping{ 129, 141, uint32(tr.maxLevel + 9), uint32(tr.maxLevel + 16) };
+                case ContentTier::RAID_END: // Hyjal, BT (T6)
+                    return PowerBandMapping{ 142, 154, uint32(tr.maxLevel + 17), uint32(tr.maxLevel + 22) };
+                case ContentTier::RAID_PINNACLE: // Sunwell Plateau
+                default:
+                    return PowerBandMapping{ 155, 164, uint32(tr.maxLevel + 23), uint32(tr.maxLevel + 26) };
+            }
+        }
+
+        if (era == ContentEra::WotLK && layout.wotlk.has_value())
+        {
+            LevelRange const& wr = *layout.wotlk;
+            switch (tier)
+            {
+                case ContentTier::WORLD:
+                case ContentTier::DUNGEON_NORMAL:
+                    return PowerBandMapping{ 138, 187, wr.minLevel, wr.maxLevel };
+                case ContentTier::DUNGEON_HEROIC:
+                    return PowerBandMapping{ 188, 200, uint32(wr.maxLevel + 1), uint32(wr.maxLevel + 4) };
+                case ContentTier::RAID_ENTRY: // Naxxramas, OS, EoE, VoA (Tier 7)
+                    return PowerBandMapping{ 200, 226, uint32(wr.maxLevel + 5), uint32(wr.maxLevel + 9) };
+                case ContentTier::RAID_MID: // Ulduar (Tier 8)
+                    return PowerBandMapping{ 227, 252, uint32(wr.maxLevel + 10), uint32(wr.maxLevel + 18) };
+                case ContentTier::RAID_END: // Trial of the Crusader / Onyxia (Tier 9)
+                    return PowerBandMapping{ 253, 258, uint32(wr.maxLevel + 19), uint32(wr.maxLevel + 26) };
+                case ContentTier::RAID_PINNACLE: // Icecrown Citadel & Ruby Sanctum (Tier 10)
+                default:
+                    return PowerBandMapping{ 259, 284, uint32(wr.maxLevel + 27), uint32(wr.maxLevel + 36) };
+            }
+        }
+
+        return std::nullopt;
     }
 }
 
@@ -223,89 +299,8 @@ ScaledItemBudget ItemBudgetScaler::CalculateItemBudget(ItemTemplate const* proto
 
     // 2. Monotonic Power Bands for compressed realms driven by ContentTier
     uint32 newIlvl = proto->ItemLevel;
-
-    if (ctx.era == ContentEra::Classic)
-    {
-        LevelRange const& cr = layout.classic;
-        if (cr.maxLevel < 60)
-        {
-            switch (ctx.tier)
-            {
-                case ContentTier::WORLD:
-                case ContentTier::DUNGEON_NORMAL:
-                    newIlvl = MapThroughBand(proto->ItemLevel, { 1, 60, 1, cr.maxLevel });
-                    break;
-                case ContentTier::DUNGEON_HEROIC:
-                case ContentTier::RAID_ENTRY: // MC, Onyxia, ZG
-                    newIlvl = MapThroughBand(proto->ItemLevel, { 61, 68, uint32(cr.maxLevel + 1), uint32(cr.maxLevel + 6) });
-                    break;
-                case ContentTier::RAID_MID: // BWL
-                    newIlvl = MapThroughBand(proto->ItemLevel, { 69, 75, uint32(cr.maxLevel + 7), uint32(cr.maxLevel + 13) });
-                    break;
-                case ContentTier::RAID_END: // AQ40
-                    newIlvl = MapThroughBand(proto->ItemLevel, { 76, 83, uint32(cr.maxLevel + 14), uint32(cr.maxLevel + 19) });
-                    break;
-                case ContentTier::RAID_PINNACLE: // Naxx40
-                default:
-                    newIlvl = MapThroughBand(proto->ItemLevel, { 84, 92, uint32(cr.maxLevel + 20), uint32(cr.maxLevel + 25) });
-                    break;
-            }
-        }
-    }
-    else if (ctx.era == ContentEra::TBC && layout.tbc.has_value())
-    {
-        LevelRange const& tr = *layout.tbc;
-        switch (ctx.tier)
-        {
-            case ContentTier::WORLD:
-            case ContentTier::DUNGEON_NORMAL:
-                newIlvl = MapThroughBand(proto->ItemLevel, { 85, 115, tr.minLevel, tr.maxLevel });
-                break;
-            case ContentTier::DUNGEON_HEROIC:
-                newIlvl = MapThroughBand(proto->ItemLevel, { 115, 120, uint32(tr.maxLevel + 1), uint32(tr.maxLevel + 3) });
-                break;
-            case ContentTier::RAID_ENTRY: // Karazhan, Gruul, Magtheridon (T4)
-                newIlvl = MapThroughBand(proto->ItemLevel, { 121, 128, uint32(tr.maxLevel + 4), uint32(tr.maxLevel + 8) });
-                break;
-            case ContentTier::RAID_MID: // SSC, TK (T5)
-                newIlvl = MapThroughBand(proto->ItemLevel, { 129, 141, uint32(tr.maxLevel + 9), uint32(tr.maxLevel + 16) });
-                break;
-            case ContentTier::RAID_END: // Hyjal, BT (T6)
-                newIlvl = MapThroughBand(proto->ItemLevel, { 142, 154, uint32(tr.maxLevel + 17), uint32(tr.maxLevel + 22) });
-                break;
-            case ContentTier::RAID_PINNACLE: // Sunwell Plateau
-            default:
-                newIlvl = MapThroughBand(proto->ItemLevel, { 155, 164, uint32(tr.maxLevel + 23), uint32(tr.maxLevel + 26) });
-                break;
-        }
-    }
-    else if (ctx.era == ContentEra::WotLK && layout.wotlk.has_value())
-    {
-        LevelRange const& wr = *layout.wotlk;
-        switch (ctx.tier)
-        {
-            case ContentTier::WORLD:
-            case ContentTier::DUNGEON_NORMAL:
-                newIlvl = MapThroughBand(proto->ItemLevel, { 138, 187, wr.minLevel, wr.maxLevel });
-                break;
-            case ContentTier::DUNGEON_HEROIC:
-                newIlvl = MapThroughBand(proto->ItemLevel, { 188, 200, uint32(wr.maxLevel + 1), uint32(wr.maxLevel + 4) });
-                break;
-            case ContentTier::RAID_ENTRY: // Naxxramas, OS, EoE, VoA (Tier 7)
-                newIlvl = MapThroughBand(proto->ItemLevel, { 200, 226, uint32(wr.maxLevel + 5), uint32(wr.maxLevel + 9) });
-                break;
-            case ContentTier::RAID_MID: // Ulduar (Tier 8)
-                newIlvl = MapThroughBand(proto->ItemLevel, { 227, 252, uint32(wr.maxLevel + 10), uint32(wr.maxLevel + 18) });
-                break;
-            case ContentTier::RAID_END: // Trial of the Crusader / Onyxia (Tier 9)
-                newIlvl = MapThroughBand(proto->ItemLevel, { 253, 258, uint32(wr.maxLevel + 19), uint32(wr.maxLevel + 26) });
-                break;
-            case ContentTier::RAID_PINNACLE: // Icecrown Citadel & Ruby Sanctum (Tier 10)
-            default:
-                newIlvl = MapThroughBand(proto->ItemLevel, { 259, 284, uint32(wr.maxLevel + 27), uint32(wr.maxLevel + 36) });
-                break;
-        }
-    }
+    if (std::optional<PowerBandMapping> const band = PowerBand(ctx.era, ctx.tier, layout))
+        newIlvl = MapThroughBand(proto->ItemLevel, *band);
 
     budget.effectiveItemLevel = newIlvl;
 
@@ -325,6 +320,37 @@ ScaledItemBudget ItemBudgetScaler::CalculateItemBudget(ItemTemplate const* proto
     }
 
     return budget;
+}
+
+uint32 ItemBudgetScaler::ScaleRequiredAverageItemLevel(uint32 authoredItemLevel, ContentEra era,
+                                                      ProgressionLayout const& layout) const
+{
+    if (!authoredItemLevel || layout.IsStockIdentity())
+        return authoredItemLevel;
+
+    // A requirement is met with gear, so it is read through the band of the content whose drops
+    // reach that level - the lowest tier that does. Reading it through the tier of the instance that
+    // asks would demand heroic gear before the heroic could be entered to get it.
+    static constexpr ContentTier sources[] =
+    {
+        ContentTier::DUNGEON_NORMAL, ContentTier::DUNGEON_HEROIC, ContentTier::RAID_ENTRY,
+        ContentTier::RAID_MID, ContentTier::RAID_END, ContentTier::RAID_PINNACLE
+    };
+
+    std::optional<PowerBandMapping> highest;
+    for (ContentTier const tier : sources)
+    {
+        std::optional<PowerBandMapping> const band = PowerBand(era, tier, layout);
+        if (!band)
+            continue;
+
+        if (authoredItemLevel <= band->authMax)
+            return MapThroughBand(authoredItemLevel, *band);
+
+        highest = band;
+    }
+
+    return highest ? MapThroughBand(authoredItemLevel, *highest) : authoredItemLevel;
 }
 
 void ItemBudgetScaler::ScaleItemTemplate(ItemTemplate* proto, ProgressionLayout const& layout) const

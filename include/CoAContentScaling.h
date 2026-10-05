@@ -55,14 +55,22 @@ public:
     static CoAContentScaling* Instance();
 
     void LoadConfig();
+    // The settings that only tune numbers, read again on .reload config.
+    void LoadTuning();
     void FinalizeAndInitialize();
     void InitializeLayout();
 
     // Rewrites the item templates, once the world has loaded them.
     void ScaleItems();
 
+    // Instance item level requirements, read in the item levels the rewritten templates carry.
+    void ScaleAccessRequirements();
+
     [[nodiscard]] bool IsEnabled() const { return _enabled; }
     [[nodiscard]] bool IsGroupScalingEnabled() const { return _groupScalingEnabled; }
+    [[nodiscard]] float GetDamageMultiplier() const { return _damageMultiplier.load(std::memory_order_relaxed); }
+    [[nodiscard]] bool IsWorldLeechEnabled() const { return _worldLeechEnabled.load(std::memory_order_relaxed); }
+    [[nodiscard]] float GetWorldLeechPercent() const { return _worldLeechPercent.load(std::memory_order_relaxed); }
     [[nodiscard]] bool IsAdaptiveMechanicsEnabled() const { return _adaptiveMechanicsEnabled; }
     [[nodiscard]] bool IsDebugEnabled() const { return _debug; }
 
@@ -143,6 +151,9 @@ private:
     bool _lockOnEncounterStart{true};
     bool _adaptiveMechanicsEnabled{true};
     bool _scaleLootCount{true};
+    std::atomic<float> _damageMultiplier{1.0f};
+    std::atomic<bool> _worldLeechEnabled{false};
+    std::atomic<float> _worldLeechPercent{5.0f};
     bool _allowSoloRaids{true};
     bool _debug{false};
 

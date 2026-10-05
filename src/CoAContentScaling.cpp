@@ -95,6 +95,19 @@ void CoAContentScaling::LoadConfig()
 
     std::string const soloMode = sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::SoloAssistMode, "0");
     sSoloAssistPolicy->SetMode(CoAContentScalingConfig::ParseSoloAssistMode(soloMode));
+
+    LoadTuning();
+}
+
+void CoAContentScaling::LoadTuning()
+{
+    float const damage = sConfigMgr->GetOption<float>(CoAContentScalingConfigKeys::DamageMultiplier, 1.0f);
+    _damageMultiplier.store(std::isfinite(damage) ? std::clamp(damage, 0.25f, 2.0f) : 1.0f, std::memory_order_relaxed);
+
+    _worldLeechEnabled.store(sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::WorldLeechEnable, false),
+                             std::memory_order_relaxed);
+    float const leech = sConfigMgr->GetOption<float>(CoAContentScalingConfigKeys::WorldLeechPercent, 5.0f);
+    _worldLeechPercent.store(std::isfinite(leech) ? std::clamp(leech, 0.0f, 100.0f) : 5.0f, std::memory_order_relaxed);
 }
 
 void CoAContentScaling::FinalizeAndInitialize()
@@ -132,6 +145,34 @@ void CoAContentScaling::ScaleItems()
         return;
 
     sItemBudgetScaler->ScaleAllItems(_layout);
+    ScaleAccessRequirements();
+}
+
+void CoAContentScaling::ScaleAccessRequirements()
+{
+    if (!sItemBudgetScaler->AreItemsScaled() || _layout.IsStockIdentity())
+        return;
+
+    uint32 scaled = 0;
+    for (GeneratedAccessProfile const& profile : sGeneratedAccessProfiles)
+    {
+        auto* access = const_cast<DungeonProgressionRequirements*>(
+            sObjectMgr->GetAccessRequirement(profile.mapId, Difficulty(profile.difficulty)));
+        if (!access || !access->reqItemLevel)
+            continue;
+
+        uint32 const authored = access->reqItemLevel;
+        access->reqItemLevel = static_cast<uint16>(
+            sItemBudgetScaler->ScaleRequiredAverageItemLevel(authored, profile.era, _layout));
+
+        if (access->reqItemLevel != authored)
+            ++scaled;
+
+        LOG_DEBUG("module.coa_content_scaling", "CoAContentScaling: map {} difficulty {} asks for item level {} instead of {}",
+                  profile.mapId, uint32(profile.difficulty), access->reqItemLevel, authored);
+    }
+
+    LOG_INFO("server.loading", "CoAContentScaling: {} instance item level requirements follow the scaled items", scaled);
 }
 
 void CoAContentScaling::InitializeLayout()
@@ -279,6 +320,17 @@ float CoAContentScaling::GetEffectiveCreatureArmor(CreatureTemplate const* cinfo
     return sCombatBudgetProfile->CalculateBudget(cinfo, ctx).armor;
 }
 
+void RescaleLootDamageRequirement(Creature* creature, uint32 previousMaxHealth)
+{
+    if (!creature || !previousMaxHealth || creature->GetMaxHealth() >= previousMaxHealth)
+        return;
+
+    uint32 const previousRequirement = creature->GetPlayerDamageReq();
+    uint32 const requirement = static_cast<uint32>(
+        uint64(previousRequirement) * creature->GetMaxHealth() / previousMaxHealth);
+    creature->LowerPlayerDamageReq(previousRequirement - requirement, false);
+}
+
 void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature)
 {
     if (!_enabled || !cinfo || !creature)
@@ -286,11 +338,13 @@ void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Crea
 
     CalculatedCombatBudget const budget = CalculateCreatureBudget(cinfo, creature);
 
-    float const pct = creature->GetMaxHealth() ? creature->GetHealthPct() : 100.0f;
+    uint32 const previousMaxHealth = creature->GetMaxHealth();
+    float const pct = previousMaxHealth ? creature->GetHealthPct() : 100.0f;
     creature->SetCreateHealth(budget.health);
     creature->SetStatFlatModifier(UNIT_MOD_HEALTH, BASE_VALUE, float(budget.health));
     creature->UpdateMaxHealth();
     creature->SetHealth(std::max<uint32>(1, static_cast<uint32>(std::round(float(creature->GetMaxHealth()) * pct / 100.0f))));
+    RescaleLootDamageRequirement(creature, previousMaxHealth);
 
     if (budget.mana > 0)
     {
@@ -405,6 +459,7 @@ void CoAContentScaling::RecalculateEncounterCombatStats(Creature* boss, Encounte
             newCurHp = 1;
     }
     boss->SetHealth(newCurHp);
+    RescaleLootDamageRequirement(boss, oldMaxHp);
 
     if (budget.mana > 0)
     {
@@ -902,6 +957,8 @@ namespace
         {
             if (reload && sContentPackRegistry->IsFinalized())
             {
+                sCoAContentScaling->LoadTuning();
+
                 LOG_WARN("module.coa_content_scaling",
                          "UniversalContentScaling: Progression layout, expansion packs and MaxPlayerLevel cannot be changed at runtime! Server restart required.");
                 return;
@@ -1211,6 +1268,32 @@ namespace
     public:
         coa_content_scaling_unit() : UnitScript("coa_content_scaling_unit") { }
 
+        // The realm's dungeon difficulty, on top of what group scaling and solo assist decided: only
+        // what the instance's enemies deal to players and what they control.
+        static float DungeonDamageMultiplier(Unit const* target, Unit const* attacker)
+        {
+            return target && target->IsControlledByPlayer() && !attacker->IsControlledByPlayer()
+                ? sCoAContentScaling->GetDamageMultiplier() : 1.0f;
+        }
+
+        void OnDamage(Unit* attacker, Unit* victim, uint32& damage) override
+        {
+            if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsWorldLeechEnabled() || !damage ||
+                !attacker || !attacker->IsPlayer() || !attacker->IsAlive() || !victim || attacker == victim ||
+                !victim->IsAlive() || !victim->IsCreature() || victim->IsControlledByPlayer() ||
+                victim->ToCreature()->IsEvadingAttacks() || victim->IsInFlight() ||
+                !attacker->GetMap() || attacker->GetMap() != victim->GetMap() || !attacker->GetMap()->IsWorldMap())
+                return;
+
+            // Damage is already mitigated here, and overkill heals nothing.
+            uint32 const dealt = std::min(damage, victim->GetHealth());
+            uint32 const missing = attacker->GetMaxHealth() - attacker->GetHealth();
+            uint32 const healing = static_cast<uint32>(std::min<double>(missing,
+                dealt * static_cast<double>(sCoAContentScaling->GetWorldLeechPercent()) / 100.0));
+            if (healing)
+                Unit::DealHeal(attacker, attacker, healing);
+        }
+
         void ModifyMeleeDamage(Unit* target, Unit* attacker, uint32& damage) override
         {
             if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || damage == 0)
@@ -1223,7 +1306,8 @@ namespace
             bool const isSolo = (ctx.effectivePlayers <= 1.0f);
             float const soloMitigation = sSoloAssistPolicy->GetDamageMitigationMultiplier(isSolo, true);
 
-            damage = static_cast<uint32>(std::ceil(float(damage) * ctx.damageScale * soloMitigation));
+            damage = static_cast<uint32>(std::ceil(float(damage) * ctx.damageScale * soloMitigation *
+                DungeonDamageMultiplier(target, attacker)));
         }
 
         void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& damage, SpellInfo const* spellInfo) override
@@ -1256,10 +1340,11 @@ namespace
             bool const isSolo = (ctx.effectivePlayers <= 1.0f);
             float const soloMitigation = sSoloAssistPolicy->GetDamageMitigationMultiplier(isSolo, true);
 
-            damage = static_cast<int32>(std::ceil(float(damage) * ctx.damageScale * soloMitigation));
+            damage = static_cast<int32>(std::ceil(float(damage) * ctx.damageScale * soloMitigation *
+                DungeonDamageMultiplier(target, attacker)));
         }
 
-        void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage, SpellInfo const* /*spellInfo*/) override
+        void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage, SpellInfo const* spellInfo) override
         {
             if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || damage == 0)
                 return;
@@ -1267,8 +1352,16 @@ namespace
             if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon())
                 return;
 
+            // Scripted lethal and percentage-of-health ticks keep their size, as the direct spell hook does.
+            float difficulty = damage >= 10000000 ? 1.0f : DungeonDamageMultiplier(target, attacker);
+            if (spellInfo)
+                for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+                    if (spellInfo->Effects[i].Effect == SPELL_EFFECT_INSTAKILL ||
+                        spellInfo->Effects[i].ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
+                        difficulty = 1.0f;
+
             InstanceScaleContext const ctx = sInstanceScalingMgr->GetOrCreateContext(attacker->GetMap());
-            damage = static_cast<uint32>(std::ceil(float(damage) * ctx.damageScale));
+            damage = static_cast<uint32>(std::ceil(float(damage) * ctx.damageScale * difficulty));
         }
 
         void ModifyHealReceived(Unit* target, Unit* healer, uint32& heal, SpellInfo const* /*spellInfo*/) override

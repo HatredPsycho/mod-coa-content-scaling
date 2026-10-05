@@ -317,6 +317,49 @@ TEST(ItemBudgetScalerTest, MonotonicRaidTierIlvlOrdering)
     EXPECT_LT(statToc, statIcc);
 }
 
+namespace
+{
+    uint32 ScaledGearLevel(uint32 itemLevel, ContentTier tier, ProgressionLayout const& layout)
+    {
+        ItemTemplate item;
+        item.ItemId = 0;
+        item.ItemLevel = itemLevel;
+        item.RequiredLevel = 80;
+
+        ItemScalingContext context;
+        context.era = ContentEra::WotLK;
+        context.tier = tier;
+        return sItemBudgetScaler->CalculateItemBudget(&item, layout, context).effectiveItemLevel;
+    }
+}
+
+TEST(ItemBudgetScalerTest, HeroicItemLevelRequirementIsMetByTheGearThatComesBeforeIt)
+{
+    ProgressionLayout const layout = ProgressionLayout::Create(60, true, true);
+
+    uint32 const heroic = sItemBudgetScaler->ScaleRequiredAverageItemLevel(180, ContentEra::WotLK, layout);
+    uint32 const heroicToc = sItemBudgetScaler->ScaleRequiredAverageItemLevel(200, ContentEra::WotLK, layout);
+    uint32 const heroicHor = sItemBudgetScaler->ScaleRequiredAverageItemLevel(219, ContentEra::WotLK, layout);
+
+    EXPECT_LE(heroic, ScaledGearLevel(187, ContentTier::DUNGEON_NORMAL, layout));
+    EXPECT_LE(heroicToc, ScaledGearLevel(200, ContentTier::DUNGEON_HEROIC, layout));
+    EXPECT_LE(heroicHor, ScaledGearLevel(219, ContentTier::RAID_ENTRY, layout));
+
+    EXPECT_GT(heroic, ScaledGearLevel(150, ContentTier::DUNGEON_NORMAL, layout));
+    EXPECT_LT(heroic, heroicToc);
+    EXPECT_LT(heroicToc, heroicHor);
+    EXPECT_LT(heroicHor, 180u);
+}
+
+TEST(ItemBudgetScalerTest, ItemLevelRequirementStaysAuthoredOnTheStockLayout)
+{
+    ProgressionLayout const layout = ProgressionLayout::Create(80, true, true);
+    ASSERT_TRUE(layout.IsStockIdentity());
+
+    EXPECT_EQ(sItemBudgetScaler->ScaleRequiredAverageItemLevel(180, ContentEra::WotLK, layout), 180u);
+    EXPECT_EQ(sItemBudgetScaler->ScaleRequiredAverageItemLevel(219, ContentEra::WotLK, layout), 219u);
+}
+
 // 8. Instance Profile Validation and Multi-Era Resolution (Onyxia 249)
 TEST(InstanceProfileRegistryTest, ValidationAndEraResolution)
 {
