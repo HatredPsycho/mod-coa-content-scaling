@@ -133,7 +133,7 @@ void CoAContentScaling::FinalizeAndInitialize()
     // Item templates are not scaled here. This runs from OnLoadCustomDatabaseTable, which the world
     // reaches about a hundred and fifty steps before LoadItemTemplates - the store is still empty,
     // and the pass walked zero templates on every start since the module was written. ScaleItems()
-    // does it from OnStartup instead, once everything is loaded and before anyone can log in.
+    // does it from OnBeforeWorldInitialized instead, once everything is loaded.
 
     LOG_INFO("server.loading", "CoAContentScaling: Finalized lifecycle and built immutable ProgressionLayout (Cap {})",
              _layout.maxLevel);
@@ -211,8 +211,10 @@ uint8 CoAContentScaling::GetEffectiveCreatureLevel(CreatureTemplate const* cinfo
     if (!_enabled || !cinfo)
         return authoredLevel;
 
+    // Asked about a template alone - where a creature would be, not one that is - there is no map to
+    // read, and map 0 would claim every Outland and Northrend creature for Eastern Kingdoms.
     Map const* map = creature ? creature->GetMap() : nullptr;
-    uint32 const mapId = map ? map->GetId() : 0;
+    uint32 const mapId = map ? map->GetId() : (creature ? 0 : ContentPackRegistry::MAP_UNSPECIFIED);
     uint32 const areaId = creature ? creature->GetAreaId() : 0;
 
     ContentEra const era = _layout.ResolveContentEra(sContentPackRegistry->ResolveEraForCreature(
@@ -257,6 +259,17 @@ uint32 CoAContentScaling::GetEffectiveQuestMinLevel(Quest const* quest) const
         return 255; // Lock out quest from disabled expansion
 
     return static_cast<uint32>(_layout.MapAuthoredToEffective(era, static_cast<uint8>(authoredMin)));
+}
+
+uint8 CoAContentScaling::GetEffectiveAreaContentLevel(uint32 areaId, uint32 mapId, uint8 authoredLevel) const
+{
+    if (!_enabled || authoredLevel == 0)
+        return authoredLevel;
+
+    ContentEra const era = _layout.ResolveContentEra(
+        sContentPackRegistry->ResolveEraForArea(areaId, mapId), authoredLevel);
+
+    return _layout.MapAuthoredToEffective(era, authoredLevel);
 }
 
 uint8 CoAContentScaling::GetEffectiveAbilityRequiredLevel(uint8 authoredLevel) const
@@ -967,9 +980,12 @@ namespace
             sCoAContentScaling->LoadConfig();
         }
 
-        // Everything is loaded by the time this fires, and nobody can log in yet: the one point in
-        // the start where the item store exists and rewriting it is still invisible.
-        void OnStartup() override
+        // Every store is loaded by the time this fires, and nobody can log in yet. It is also where
+        // modules build their own caches from the item templates - the bots sort the gear they hand
+        // out by the level it asks for - and this module's scripts are registered ahead of theirs,
+        // so the templates are rewritten before any of them reads one. OnStartup came too late:
+        // a bot of the cap never received gear from the expansions mapped into its levels.
+        void OnBeforeWorldInitialized() override
         {
             sCoAContentScaling->ScaleItems();
         }
@@ -1001,6 +1017,11 @@ namespace
                 LocalLevelScaling::CreatureBaseLevelOwner.store([](CreatureTemplate const* cinfo, Creature const* creature) -> uint8
                 {
                     return sCoAContentScaling->GetEffectiveCreatureLevel(cinfo, creature, cinfo ? cinfo->maxlevel : 1);
+                }, std::memory_order_relaxed);
+
+                LocalLevelScaling::AreaContentLevelOwner.store([](uint32 areaId, uint32 mapId, uint8 authoredLevel) -> uint8
+                {
+                    return sCoAContentScaling->GetEffectiveAreaContentLevel(areaId, mapId, authoredLevel);
                 }, std::memory_order_relaxed);
 
                 LocalLevelScaling::CreatureArmorOwner.store([](CreatureTemplate const* cinfo, Creature const* creature,
@@ -1139,6 +1160,7 @@ namespace
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::AbilityRequiredLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::AreaContentLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEffectValueOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEnchantmentAmountOwner.store(nullptr, std::memory_order_relaxed);
