@@ -474,14 +474,49 @@ AppliedItemScaling const* ItemBudgetScaler::FindAppliedScaling(uint32 itemEntry)
     return itr != _appliedScaling.end() ? &itr->second : nullptr;
 }
 
+std::optional<AppliedItemScaling> ItemBudgetScaler::ResolveAppliedScaling(uint32 itemEntry) const
+{
+    if (AppliedItemScaling const* applied = FindAppliedScaling(itemEntry))
+        return *applied;
+
+    // A lifted copy (a drop or reward raised above the content's level) carries the authored item's spells,
+    // enchantment slots and sockets, so it is cut the way that item was, measured from the copy's own levels.
+    uint32 const baseEntry = LocalLevelScaling::BaseItemEntry(itemEntry);
+    if (baseEntry == itemEntry)
+        return std::nullopt;
+
+    AppliedItemScaling const* base = FindAppliedScaling(baseEntry);
+    if (!base)
+        return std::nullopt;
+
+    ItemTemplate const* copy = sObjectMgr->GetItemTemplate(itemEntry);
+    return copy ? LiftedScaling(*base, copy->ItemLevel, copy->RequiredLevel) : *base;
+}
+
+AppliedItemScaling ItemBudgetScaler::LiftedScaling(AppliedItemScaling const& base, uint32 itemLevel, uint32 requiredLevel)
+{
+    AppliedItemScaling lifted = base;
+    if (!base.authoredItemLevel)
+        return lifted;
+
+    lifted.effectiveItemLevel = itemLevel;
+    lifted.effectiveRequiredLevel = requiredLevel;
+    float const ilvlRatio = float(itemLevel) / float(base.authoredItemLevel);
+    lifted.statMultiplier = std::clamp<float>(ilvlRatio, 0.20f, 1.0f);
+    float const levelRatio = base.authoredRequiredLevel > 0 ?
+        float(requiredLevel) / float(base.authoredRequiredLevel) : ilvlRatio;
+    lifted.ratingMultiplier = std::clamp<float>(lifted.statMultiplier * (levelRatio * levelRatio), 0.15f, 1.0f);
+    return lifted;
+}
+
 float ItemBudgetScaler::GetStatMultiplier(uint32 itemEntry) const
 {
-    AppliedItemScaling const* applied = FindAppliedScaling(itemEntry);
+    std::optional<AppliedItemScaling> const applied = ResolveAppliedScaling(itemEntry);
     return applied ? applied->statMultiplier : 1.0f;
 }
 
 float ItemBudgetScaler::GetRatingMultiplier(uint32 itemEntry) const
 {
-    AppliedItemScaling const* applied = FindAppliedScaling(itemEntry);
+    std::optional<AppliedItemScaling> const applied = ResolveAppliedScaling(itemEntry);
     return applied ? applied->ratingMultiplier : 1.0f;
 }
