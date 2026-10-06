@@ -43,6 +43,7 @@
 #include "SpellInfo.h"
 #include "World.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 void AddCoAContentScalingCommands();
@@ -97,7 +98,15 @@ void CoAContentScaling::LoadConfig()
     std::string const soloMode = sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::SoloAssistMode, "0");
     sSoloAssistPolicy->SetMode(CoAContentScalingConfig::ParseSoloAssistMode(soloMode));
 
+    _authenticMaps = CoAContentScalingConfig::ParseMapList(
+        sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::AuthenticMaps, ""));
+
     LoadTuning();
+}
+
+bool CoAContentScaling::IsAuthenticMap(Map const* map) const
+{
+    return map && IsAuthenticMap(map->GetId());
 }
 
 void CoAContentScaling::LoadTuning()
@@ -140,10 +149,172 @@ void CoAContentScaling::FinalizeAndInitialize()
              _layout.maxLevel);
 }
 
+namespace
+{
+    enum LootSource : uint8
+    {
+        LOOT_SOURCE_AUTHENTIC = 1,
+        LOOT_SOURCE_SCALED    = 2
+    };
+
+    using LootSources = std::unordered_map<uint32, uint8>;
+
+    struct ScriptSummonedCreature
+    {
+        uint32 mapId;
+        uint32 entry;
+    };
+
+    // Creatures the instance scripts summon instead of spawning, so no spawn ties their loot to a map.
+    constexpr std::array<ScriptSummonedCreature, 45> ScriptSummonedCreatures
+    {{
+        { 409, 11502 }, { 409, 11663 }, { 409, 11664 }, { 409, 12018 }, { 409, 12119 },
+        { 469, 11583 },
+        { 309, 14515 }, { 309, 15082 }, { 309, 15083 }, { 309, 15084 }, { 309, 15085 }, { 309, 15114 },
+        { 531, 15246 }, { 531, 15517 },
+        { 229, 10258 }, { 229, 10264 }, { 229, 10268 }, { 229, 10339 }, { 229, 10584 }, { 229, 10601 },
+        { 229, 10602 }, { 229, 10683 }, { 229, 10742 },
+        { 230, 8925 }, { 230, 8926 }, { 230, 8927 }, { 230, 8928 }, { 230, 8932 }, { 230, 8933 },
+        { 230, 9027 }, { 230, 9028 }, { 230, 9029 }, { 230, 9030 }, { 230, 9031 }, { 230, 9032 },
+        { 230, 9476 }, { 230, 10076 }, { 230, 16059 },
+        { 289, 10506 }, { 289, 11284 }, { 289, 11598 },
+        { 329, 10394 }, { 329, 10439 }, { 329, 16101 }, { 329, 16102 }
+    }};
+
+    struct LootRow
+    {
+        uint32 entry;
+        uint32 item;
+        uint32 reference;
+    };
+
+    std::vector<LootRow> LoadLootRows(std::string_view table)
+    {
+        std::vector<LootRow> rows;
+        if (QueryResult result = WorldDatabase.Query("SELECT Entry, Item, Reference FROM {}", table))
+        {
+            rows.reserve(result->GetRowCount());
+            do
+            {
+                Field* fields = result->Fetch();
+                rows.push_back({ fields[0].Get<uint32>(), fields[1].Get<uint32>(), fields[2].Get<uint32>() });
+            } while (result->NextRow());
+        }
+
+        return rows;
+    }
+
+    void MarkCreatureLoot(LootSources& sources, uint32 entry, uint8 source)
+    {
+        CreatureTemplate const* cinfo = sObjectMgr->GetCreatureTemplate(entry);
+        if (!cinfo)
+            return;
+
+        if (cinfo->lootid)
+            sources[cinfo->lootid] |= source;
+
+        for (uint32 difficultyEntry : cinfo->DifficultyEntry)
+            if (CreatureTemplate const* variant = difficultyEntry ? sObjectMgr->GetCreatureTemplate(difficultyEntry) : nullptr)
+                if (variant->lootid)
+                    sources[variant->lootid] |= source;
+    }
+
+    bool SpreadLoot(std::vector<LootRow> const& rows, LootSources const& containers, LootSources& references,
+                    LootSources& items)
+    {
+        bool changed = false;
+        for (LootRow const& row : rows)
+        {
+            auto const container = containers.find(row.entry);
+            if (container == containers.end())
+                continue;
+
+            uint8 const source = container->second;
+            uint8& target = row.reference ? references[row.reference] : items[row.item];
+            if ((target | source) != target)
+            {
+                target |= source;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+}
+
+std::unordered_set<uint32> CoAContentScaling::CollectAuthenticItems() const
+{
+    // An item keeps its authored template only when every spawned source of it is on an authentic map:
+    // a shared table that also drops in scaled content keeps following the scaled content.
+    LootSources creatureLoot;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
+    {
+        uint8 const source = IsAuthenticMap(data.mapid) ? LOOT_SOURCE_AUTHENTIC : LOOT_SOURCE_SCALED;
+        for (uint32 entry : { data.id, data.id2, data.id3 })
+            if (entry)
+                MarkCreatureLoot(creatureLoot, entry, source);
+    }
+
+    for (ScriptSummonedCreature const& summoned : ScriptSummonedCreatures)
+        if (IsAuthenticMap(summoned.mapId))
+            MarkCreatureLoot(creatureLoot, summoned.entry, LOOT_SOURCE_AUTHENTIC);
+
+    for (uint32 mapId : _authenticMaps)
+        for (uint8 difficulty = 0; difficulty < MAX_DIFFICULTY; ++difficulty)
+            if (DungeonEncounterList const* encounters = sObjectMgr->GetDungeonEncounterList(mapId, Difficulty(difficulty)))
+                for (DungeonEncounter const* encounter : *encounters)
+                    if (encounter->creditType == ENCOUNTER_CREDIT_KILL_CREATURE)
+                        MarkCreatureLoot(creatureLoot, encounter->creditEntry, LOOT_SOURCE_AUTHENTIC);
+
+    LootSources chestLoot;
+    for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
+        if (GameObjectTemplate const* goInfo = sObjectMgr->GetGameObjectTemplate(data.id))
+            if (uint32 const lootId = goInfo->GetLootId())
+                chestLoot[lootId] |= IsAuthenticMap(data.mapid) ? LOOT_SOURCE_AUTHENTIC : LOOT_SOURCE_SCALED;
+
+    LootSources references;
+    LootSources items;
+    SpreadLoot(LoadLootRows("creature_loot_template"), creatureLoot, references, items);
+    SpreadLoot(LoadLootRows("gameobject_loot_template"), chestLoot, references, items);
+
+    std::vector<LootRow> const referenceRows = LoadLootRows("reference_loot_template");
+    while (SpreadLoot(referenceRows, LootSources(references), references, items))
+        ;
+
+    std::unordered_set<uint32> authentic;
+    for (auto const& [item, source] : items)
+        if (source == LOOT_SOURCE_AUTHENTIC)
+            authentic.insert(item);
+
+    if (QueryResult result = WorldDatabase.Query("SELECT base_item, heroic_item, mythic_item FROM coa_dungeon_loot_variant"))
+    {
+        do
+        {
+            Field* fields = result->Fetch();
+            if (!authentic.count(fields[0].Get<uint32>()))
+                continue;
+
+            for (uint8 tier = 1; tier <= 2; ++tier)
+                if (uint32 const variant = fields[tier].Get<uint32>())
+                    authentic.insert(variant);
+        } while (result->NextRow());
+    }
+
+    return authentic;
+}
+
 void CoAContentScaling::ScaleItems()
 {
     if (!_enabled || !sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::ScaleItems, true))
         return;
+
+    if (!_authenticMaps.empty())
+    {
+        std::unordered_set<uint32> items = CollectAuthenticItems();
+        LOG_INFO("server.loading", "CoAContentScaling: {} items of {} authentic maps keep their authored levels",
+                 items.size(), _authenticMaps.size());
+        sItemBudgetScaler->PreserveItems(std::move(items));
+    }
 
     sItemBudgetScaler->ScaleAllItems(_layout);
     ScaleAccessRequirements();
@@ -157,6 +328,9 @@ void CoAContentScaling::ScaleAccessRequirements()
     uint32 scaled = 0;
     for (GeneratedAccessProfile const& profile : sGeneratedAccessProfiles)
     {
+        if (IsAuthenticMap(profile.mapId))
+            continue;
+
         auto* access = const_cast<DungeonProgressionRequirements*>(
             sObjectMgr->GetAccessRequirement(profile.mapId, Difficulty(profile.difficulty)));
         if (!access || !access->reqItemLevel)
@@ -214,7 +388,10 @@ uint8 CoAContentScaling::GetEffectiveCreatureLevel(CreatureTemplate const* cinfo
 
     // Asked about a template alone - where a creature would be, not one that is - there is no map to
     // read, and map 0 would claim every Outland and Northrend creature for Eastern Kingdoms.
-    Map const* map = creature ? creature->GetMap() : nullptr;
+    Map const* map = creature ? creature->FindMap() : nullptr;
+    if (IsAuthenticMap(map))
+        return authoredLevel;
+
     uint32 const mapId = map ? map->GetId() : (creature ? 0 : ContentPackRegistry::MAP_UNSPECIFIED);
     uint32 const areaId = creature ? creature->GetAreaId() : 0;
 
@@ -264,7 +441,7 @@ uint32 CoAContentScaling::GetEffectiveQuestMinLevel(Quest const* quest) const
 
 uint8 CoAContentScaling::GetEffectiveAreaContentLevel(uint32 areaId, uint32 mapId, uint8 authoredLevel) const
 {
-    if (!_enabled || authoredLevel == 0)
+    if (!_enabled || authoredLevel == 0 || IsAuthenticMap(mapId))
         return authoredLevel;
 
     ContentEra const era = _layout.ResolveContentEra(
@@ -325,7 +502,7 @@ CalculatedCombatBudget CoAContentScaling::CalculateCreatureBudget(CreatureTempla
 float CoAContentScaling::GetEffectiveCreatureArmor(CreatureTemplate const* cinfo, Creature const* creature,
                                                    float generatedArmor) const
 {
-    if (!_enabled || !cinfo)
+    if (!_enabled || !cinfo || (creature && IsAuthenticMap(creature->FindMap())))
         return generatedArmor;
 
     CreatureScaleContext const ctx = sCombatBudgetProfile->BuildContext(cinfo, creature,
@@ -347,7 +524,7 @@ void RescaleLootDamageRequirement(Creature* creature, uint32 previousMaxHealth)
 
 void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Creature* creature)
 {
-    if (!_enabled || !cinfo || !creature)
+    if (!_enabled || !cinfo || !creature || IsAuthenticMap(creature->FindMap()))
         return;
 
     CalculatedCombatBudget const budget = CalculateCreatureBudget(cinfo, creature);
@@ -392,7 +569,7 @@ void CoAContentScaling::ApplyCreatureScaling(CreatureTemplate const* cinfo, Crea
 
 uint32 CoAContentScaling::RescaleDungeonCreatures(Map* map)
 {
-    if (!_enabled || !_groupScalingEnabled || !map || !map->IsDungeon())
+    if (!_enabled || !_groupScalingEnabled || !map || !map->IsDungeon() || IsAuthenticMap(map))
         return 0;
 
     // A creature is given its budget once, when it is created - and the map is created by whoever
@@ -431,7 +608,7 @@ void CoAContentScaling::RecalculateEncounterCombatStats(Creature* boss, Encounte
         return;
 
     Map* map = boss->GetMap();
-    if (!map || !map->IsDungeon())
+    if (!map || !map->IsDungeon() || IsAuthenticMap(map))
         return;
 
     CreatureScaleContext ctx = sCombatBudgetProfile->BuildContext(cinfo, boss, boss->GetLevel());
@@ -1000,6 +1177,11 @@ namespace
 
             if (enabled)
             {
+                LocalLevelScaling::AuthenticMapOwner.store([](uint32 mapId) -> bool
+                {
+                    return sCoAContentScaling->IsAuthenticMap(mapId);
+                }, std::memory_order_relaxed);
+
                 LocalLevelScaling::QuestBaseLevelOwner.store([](Quest const* quest) -> int32
                 {
                     return sCoAContentScaling->GetEffectiveQuestLevel(quest);
@@ -1157,6 +1339,7 @@ namespace
             }
             else
             {
+                LocalLevelScaling::AuthenticMapOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::AbilityRequiredLevelOwner.store(nullptr, std::memory_order_relaxed);
@@ -1190,7 +1373,8 @@ namespace
 
         void OnInitializeLockedDungeons(Player* player, uint8& /*level*/, uint32& lockData, lfg::LFGDungeonData const* dungeon) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !player || !dungeon)
+            if (!sCoAContentScaling->IsEnabled() || !player || !dungeon ||
+                sCoAContentScaling->IsAuthenticMap(dungeon->map))
                 return;
 
             auto const* lfgProf = FindGeneratedLfgProfile(dungeon->id);
@@ -1322,7 +1506,8 @@ namespace
             if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || damage == 0)
                 return;
 
-            if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon())
+            if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon() ||
+                sCoAContentScaling->IsAuthenticMap(attacker->GetMap()))
                 return;
 
             InstanceScaleContext const ctx = sInstanceScalingMgr->GetOrCreateContext(attacker->GetMap());
@@ -1338,7 +1523,8 @@ namespace
             if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || damage <= 0)
                 return;
 
-            if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon())
+            if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon() ||
+                sCoAContentScaling->IsAuthenticMap(attacker->GetMap()))
                 return;
 
             // Instakill and extreme script damage mechanic protection
@@ -1372,7 +1558,8 @@ namespace
             if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || damage == 0)
                 return;
 
-            if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon())
+            if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon() ||
+                sCoAContentScaling->IsAuthenticMap(attacker->GetMap()))
                 return;
 
             // Scripted lethal and percentage-of-health ticks keep their size, as the direct spell hook does.
@@ -1392,7 +1579,8 @@ namespace
             if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || heal == 0)
                 return;
 
-            if (!target || !target->IsCreature() || !target->GetMap() || !target->GetMap()->IsDungeon())
+            if (!target || !target->IsCreature() || !target->GetMap() || !target->GetMap()->IsDungeon() ||
+                sCoAContentScaling->IsAuthenticMap(target->GetMap()))
                 return;
 
             InstanceScaleContext const ctx = sInstanceScalingMgr->GetOrCreateContext(target->GetMap());
@@ -1409,7 +1597,8 @@ namespace
             if (!sCoAContentScaling->IsGroupScalingEnabled() || amount <= 0)
                 return;
 
-            if (!caster || !caster->IsCreature() || !caster->GetMap() || !caster->GetMap()->IsDungeon())
+            if (!caster || !caster->IsCreature() || !caster->GetMap() || !caster->GetMap()->IsDungeon() ||
+                sCoAContentScaling->IsAuthenticMap(caster->GetMap()))
                 return;
 
             if (effect->GetAuraType() == SPELL_AURA_SCHOOL_ABSORB ||
@@ -1565,7 +1754,7 @@ namespace
         void OnResolveDungeonAccessLevels(Player const* player, uint32 mapId, Difficulty difficulty,
             uint8& minLevel, uint8& maxLevel) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !player)
+            if (!sCoAContentScaling->IsEnabled() || !player || sCoAContentScaling->IsAuthenticMap(mapId))
                 return;
 
             if (IsRetrievingOwnCorpse(player, mapId))
@@ -1627,7 +1816,7 @@ namespace
             // Mail loot is generated while a character loads, before it has a map (achievement rewards in
             // Player::LoadFromDB): GetMap() would assert there.
             Map* map = lootOwner->FindMap();
-            if (!map || !map->IsDungeon())
+            if (!map || !map->IsDungeon() || sCoAContentScaling->IsAuthenticMap(map))
                 return;
 
             InstanceScaleContext const ctx = sInstanceScalingMgr->GetOrCreateContext(map);
@@ -1690,7 +1879,8 @@ namespace
 
         void OnResolveEncounterMechanic(Map* map, uint32 encounterId, uint32 mechanicId, uint8 mechanicType, uint32 authoredValue, uint32& resolvedValue) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsAdaptiveMechanicsEnabled() || !map)
+            if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsAdaptiveMechanicsEnabled() || !map ||
+                sCoAContentScaling->IsAuthenticMap(map))
                 return;
 
             EncounterContext ctx = sInstanceScalingMgr->BuildEncounterContext(map, encounterId);

@@ -11,6 +11,7 @@
 #include "SoloAssistPolicy.h"
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 namespace CoAContentScalingConfigKeys
 {
@@ -33,11 +34,15 @@ namespace CoAContentScalingConfigKeys
     inline constexpr char const* LfgDefaultMode = "CoAContentScaling.LFG.DefaultMode";
     inline constexpr char const* LfgDefaultChallengeSize = "CoAContentScaling.LFG.DefaultChallengeSize";
     inline constexpr char const* Debug = "CoAContentScaling.Debug";
+    inline constexpr char const* AuthenticMaps = "CoAContentScaling.AuthenticMaps";
 }
 
 namespace CoAContentScalingConfig
 {
     std::string Trim(std::string_view str);
+
+    // A comma separated list of map ids. Entries that are not a number are skipped with a warning.
+    std::unordered_set<uint32> ParseMapList(std::string_view raw);
 
     std::string ParseProgressionMode(std::string_view raw);
 
