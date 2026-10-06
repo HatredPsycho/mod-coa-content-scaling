@@ -1675,24 +1675,25 @@ namespace
             if (!aura)
                 return;
 
-            ObjectGuid const castItemGuid = aura->GetCastItemGUID();
-            if (!castItemGuid)
+            // The template entry, not the item: a consumable is used up by the time its buff is cast
+            // (the last food of a stack), and it has to be cut exactly like the stack it came from.
+            uint32 const castItemEntry = aura->GetCastItemEntry();
+            if (!castItemEntry)
                 return;
 
             Unit* owner = aura->GetCaster();
             Player* player = owner ? owner->ToPlayer() : nullptr;
-            Item const* castItem = player ? player->GetItemByGuid(castItemGuid) : nullptr;
-            if (!castItem)
+            if (!player)
                 return;
 
             float multiplier = 1.0f;
             switch (GetAuraAmountFactor(effect->GetAuraType()))
             {
                 case ScaledAmountFactor::Stat:
-                    multiplier = sItemBudgetScaler->GetStatMultiplier(castItem->GetEntry());
+                    multiplier = sItemBudgetScaler->GetStatMultiplier(castItemEntry);
                     break;
                 case ScaledAmountFactor::Rating:
-                    multiplier = sItemBudgetScaler->GetRatingMultiplier(castItem->GetEntry());
+                    multiplier = sItemBudgetScaler->GetRatingMultiplier(castItemEntry);
                     break;
                 case ScaledAmountFactor::None:
                     return;
