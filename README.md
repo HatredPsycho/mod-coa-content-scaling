@@ -102,6 +102,24 @@ In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Si
 | `.lfgmode [matchmaking\|bots\|party]` | Sets personal dungeon finder composition mode (standard queue, bot fill, or partial party). |
 | `.lfgchallenge [adaptive\|1..40]` | Sets instance scaling challenge target (adaptive to group size, or fixed simulated player count). |
 
+The settings are kept per character. In a group the leader's setting decides. Random bots never set one and keep
+`LFG.DefaultMode`.
+
+### CoALFGMode Addon
+`addon/CoALFGMode` puts the same two settings in a row above the Dungeon Finder's queue button: Group (Matchmaking,
+Fill with bots, Start now) and Bosses (the challenge size). Its tooltip explains the choices and why one is unavailable. Copy the folder into the client's `Interface\AddOns`. `/coalfg` sets them from the
+chat line as well (`/coalfg party`, `/coalfg challenge 5`, `/coalfg` alone shows the current state).
+
+The addon whispers itself in the addon language with the prefix `CoALFG`; the server answers every request with the
+character's state:
+
+| Request | Answer |
+|---|---|
+| `GET`, `MODE matchmaking\|bots\|party`, `CHALLENGE 0..40` | `STATE <mode> <challenge> <scaling 0\|1> <botfill 0\|1>` |
+
+Bot fill is offered only when a bot provider (mod-playerbots) is registered, and every choice is disabled while
+content scaling is off.
+
 ---
 
 ## Installation
