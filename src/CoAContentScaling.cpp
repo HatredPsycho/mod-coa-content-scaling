@@ -1624,7 +1624,9 @@ namespace
             if (!sCoAContentScaling->IsEnabled() || !loot || !lootOwner)
                 return;
 
-            Map* map = lootOwner->GetMap();
+            // Mail loot is generated while a character loads, before it has a map (achievement rewards in
+            // Player::LoadFromDB): GetMap() would assert there.
+            Map* map = lootOwner->FindMap();
             if (!map || !map->IsDungeon())
                 return;
 

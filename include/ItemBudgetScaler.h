@@ -12,6 +12,7 @@
 #include "ProgressionLayout.h"
 #include "SharedDefines.h"
 #include "SpellAuraDefines.h"
+#include <optional>
 #include <unordered_map>
 #include <utility>
 
@@ -227,6 +228,11 @@ public:
     [[nodiscard]] float GetRatingMultiplier(uint32 itemEntry) const;
 
     [[nodiscard]] AppliedItemScaling const* FindAppliedScaling(uint32 itemEntry) const;
+    // The same for any item, including a lifted copy of a cut item, which is cut from its own levels.
+    [[nodiscard]] std::optional<AppliedItemScaling> ResolveAppliedScaling(uint32 itemEntry) const;
+    // The cut of a copy at these levels of an item cut as in `base`: the same measure, from the copy's levels.
+    [[nodiscard]] static AppliedItemScaling LiftedScaling(AppliedItemScaling const& base, uint32 itemLevel,
+                                                          uint32 requiredLevel);
 
     [[nodiscard]] bool AreItemsScaled() const { return _itemsScaled; }
     void ResetScaledState() { _itemsScaled = false; }
