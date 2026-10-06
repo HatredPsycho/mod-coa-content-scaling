@@ -106,9 +106,8 @@ Without an argument both commands show the current settings. The settings are ke
 `LFG.DefaultMode`.
 
 ### CoALFGMode Addon
-`addon/CoALFGMode` puts the same two settings in a row above the Dungeon Finder's queue button: Group (Matchmaking,
-Fill with bots, Start now) and Bosses (the challenge size). Its tooltip explains the choices and why one is unavailable. Copy the folder into the client's `Interface\AddOns`. `/coalfg` sets them from the
-chat line as well (`/coalfg party`, `/coalfg challenge 5`, `/coalfg` alone shows the current state).
+The CoALFGMode addon sets both from the Dungeon Finder. It is kept with the core's other client addons in
+`Extras/CoALFGMode`, where its README section describes it.
 
 The addon whispers itself in the addon language with the prefix `CoALFG`; the server answers every request with the
 character's state:
