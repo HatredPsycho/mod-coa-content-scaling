@@ -64,6 +64,47 @@ CoAContentScaling.Progression.TbcEnd = 0
 CoAContentScaling.AuthenticMaps = 309, 509, 409, 469, 531, 230, 229, 429, 289, 329
 
 #
+# CoAContentScaling.AuthenticHeroicMaps
+#     Description: Comma separated dungeon map ids whose Heroic and Mythic difficulties are played at
+#                  their authored levels, like AuthenticMaps, while Normal stays scaled. The Heroic and
+#                  Mythic loot variants of items dropped there keep their authored stats. Maps also in
+#                  AuthenticMaps are authentic on every difficulty. Read at startup only.
+#     Default:     33, 34, 36, 43, 47, 48, 70, 90, 109, 129, 189, 209, 229, 230, 289, 329, 349, 389, 429
+#                  "" - Heroic and Mythic follow Normal
+#     Dungeons:    33  - Shadowfang Keep
+#                  34  - The Stockade
+#                  36  - The Deadmines
+#                  43  - Wailing Caverns
+#                  47  - Razorfen Kraul
+#                  48  - Blackfathom Deeps
+#                  70  - Uldaman
+#                  90  - Gnomeregan
+#                  109 - Sunken Temple
+#                  129 - Razorfen Downs
+#                  189 - Scarlet Monastery
+#                  209 - Zul'Farrak
+#                  229 - Blackrock Spire (Lower and Upper)
+#                  230 - Blackrock Depths
+#                  289 - Scholomance
+#                  329 - Stratholme
+#                  349 - Maraudon
+#                  389 - Ragefire Chasm
+#                  429 - Dire Maul
+#
+CoAContentScaling.AuthenticHeroicMaps = 33, 34, 36, 43, 47, 48, 70, 90, 109, 129, 189, 209, 229, 230, 289, 329, 349, 389, 429
+
+#
+# CoAContentScaling.AuthenticHeroicMinLevel
+#     Description: Level a character needs for the Heroic and Mythic difficulties of the dungeons in
+#                  AuthenticHeroicMaps, in the dungeon finder and at the entrance. The database carries
+#                  the Normal entry levels for them, which would let a level 10 character into a
+#                  Deadmines with level 63 bosses. Never lowers an authored requirement.
+#     Default:     60
+#                  0  - Authored entry levels
+#
+CoAContentScaling.AuthenticHeroicMinLevel = 60
+
+#
 # CoAContentScaling.GroupScaling.Enable
 #     Description: Dynamically scale dungeons and raids based on group size (1..N players).
 #     Default:     1 - Enabled

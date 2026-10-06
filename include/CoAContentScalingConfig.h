@@ -35,6 +35,8 @@ namespace CoAContentScalingConfigKeys
     inline constexpr char const* LfgDefaultChallengeSize = "CoAContentScaling.LFG.DefaultChallengeSize";
     inline constexpr char const* Debug = "CoAContentScaling.Debug";
     inline constexpr char const* AuthenticMaps = "CoAContentScaling.AuthenticMaps";
+    inline constexpr char const* AuthenticHeroicMaps = "CoAContentScaling.AuthenticHeroicMaps";
+    inline constexpr char const* AuthenticHeroicMinLevel = "CoAContentScaling.AuthenticHeroicMinLevel";
 }
 
 namespace CoAContentScalingConfig

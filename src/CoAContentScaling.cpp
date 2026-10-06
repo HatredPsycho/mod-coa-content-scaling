@@ -14,6 +14,7 @@
 #include "Creature.h"
 #include "CreatureData.h"
 #include "DBCEnums.h"
+#include "DBCStores.h"
 #include "DatabaseEnv.h"
 #include "Field.h"
 #include "GameTime.h"
@@ -100,13 +101,31 @@ void CoAContentScaling::LoadConfig()
 
     _authenticMaps = CoAContentScalingConfig::ParseMapList(
         sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::AuthenticMaps, ""));
+    _authenticHeroicMaps = CoAContentScalingConfig::ParseMapList(
+        sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::AuthenticHeroicMaps, ""));
+    _authenticHeroicMinLevel = static_cast<uint8>(std::min<uint32>(
+        sConfigMgr->GetOption<uint32>(CoAContentScalingConfigKeys::AuthenticHeroicMinLevel, 60), 255));
 
     LoadTuning();
 }
 
+bool CoAContentScaling::IsAuthenticMap(uint32 mapId, uint8 difficulty) const
+{
+    return _authenticMaps.count(mapId) ||
+        (difficulty != REGULAR_DIFFICULTY && _authenticHeroicMaps.count(mapId));
+}
+
 bool CoAContentScaling::IsAuthenticMap(Map const* map) const
 {
-    return map && IsAuthenticMap(map->GetId());
+    return map && IsAuthenticMap(map->GetId(), map->GetDifficulty());
+}
+
+uint8 CoAContentScaling::GetAuthenticMinLevel(uint32 mapId, uint8 difficulty, uint8 authoredMinLevel) const
+{
+    if (difficulty == REGULAR_DIFFICULTY || !_authenticHeroicMaps.count(mapId))
+        return authoredMinLevel;
+
+    return std::max(authoredMinLevel, _authenticHeroicMinLevel);
 }
 
 void CoAContentScaling::LoadTuning()
@@ -151,10 +170,17 @@ void CoAContentScaling::FinalizeAndInitialize()
 
 namespace
 {
+    // What a loot table is dropped as: the items themselves, and the Heroic and Mythic variants
+    // coa_dungeon_loot_variant swaps them for on a dungeon's higher difficulties.
     enum LootSource : uint8
     {
-        LOOT_SOURCE_AUTHENTIC = 1,
-        LOOT_SOURCE_SCALED    = 2
+        LOOT_SOURCE_AUTHENTIC         = 1,
+        LOOT_SOURCE_SCALED            = 2,
+        LOOT_SOURCE_VARIANT_AUTHENTIC = 4,
+        LOOT_SOURCE_VARIANT_SCALED    = 8,
+
+        LOOT_SOURCE_ITEM_MASK    = LOOT_SOURCE_AUTHENTIC | LOOT_SOURCE_SCALED,
+        LOOT_SOURCE_VARIANT_MASK = LOOT_SOURCE_VARIANT_AUTHENTIC | LOOT_SOURCE_VARIANT_SCALED
     };
 
     using LootSources = std::unordered_map<uint32, uint8>;
@@ -204,19 +230,21 @@ namespace
         return rows;
     }
 
-    void MarkCreatureLoot(LootSources& sources, uint32 entry, uint8 source)
+    template <typename SourceOf>
+    void MarkCreatureLoot(LootSources& sources, uint32 entry, SourceOf sourceOf)
     {
         CreatureTemplate const* cinfo = sObjectMgr->GetCreatureTemplate(entry);
         if (!cinfo)
             return;
 
         if (cinfo->lootid)
-            sources[cinfo->lootid] |= source;
+            sources[cinfo->lootid] |= sourceOf(REGULAR_DIFFICULTY, true);
 
-        for (uint32 difficultyEntry : cinfo->DifficultyEntry)
-            if (CreatureTemplate const* variant = difficultyEntry ? sObjectMgr->GetCreatureTemplate(difficultyEntry) : nullptr)
-                if (variant->lootid)
-                    sources[variant->lootid] |= source;
+        for (uint8 index = 0; index < MAX_DIFFICULTY - 1; ++index)
+            if (uint32 const difficultyEntry = cinfo->DifficultyEntry[index])
+                if (CreatureTemplate const* variant = sObjectMgr->GetCreatureTemplate(difficultyEntry))
+                    if (variant->lootid)
+                        sources[variant->lootid] |= sourceOf(Difficulty(index + 1), false);
     }
 
     bool SpreadLoot(std::vector<LootRow> const& rows, LootSources const& containers, LootSources& references,
@@ -245,32 +273,44 @@ namespace
 std::unordered_set<uint32> CoAContentScaling::CollectAuthenticItems() const
 {
     // An item keeps its authored template only when every spawned source of it is on an authentic map:
-    // a shared table that also drops in scaled content keeps following the scaled content.
+    // a shared table that also drops in scaled content keeps following the scaled content. A loot table
+    // of a five-player dungeon also stands for the variants its items are swapped for on Heroic and
+    // Mythic, which follow those difficulties instead.
+    auto sourceOn = [this](uint32 mapId)
+    {
+        MapEntry const* entry = sMapStore.LookupEntry(mapId);
+        bool const hasVariants = entry && entry->IsNonRaidDungeon();
+        return [this, mapId, hasVariants](Difficulty difficulty, bool swapsToVariants) -> uint8
+        {
+            uint8 source = IsAuthenticMap(mapId, difficulty) ? LOOT_SOURCE_AUTHENTIC : LOOT_SOURCE_SCALED;
+            if (swapsToVariants && hasVariants)
+                source |= IsAuthenticMap(mapId, DUNGEON_DIFFICULTY_HEROIC) ?
+                    LOOT_SOURCE_VARIANT_AUTHENTIC : LOOT_SOURCE_VARIANT_SCALED;
+            return source;
+        };
+    };
+
     LootSources creatureLoot;
     for (auto const& [spawnId, data] : sObjectMgr->GetAllCreatureData())
-    {
-        uint8 const source = IsAuthenticMap(data.mapid) ? LOOT_SOURCE_AUTHENTIC : LOOT_SOURCE_SCALED;
         for (uint32 entry : { data.id, data.id2, data.id3 })
             if (entry)
-                MarkCreatureLoot(creatureLoot, entry, source);
-    }
+                MarkCreatureLoot(creatureLoot, entry, sourceOn(data.mapid));
 
     for (ScriptSummonedCreature const& summoned : ScriptSummonedCreatures)
-        if (IsAuthenticMap(summoned.mapId))
-            MarkCreatureLoot(creatureLoot, summoned.entry, LOOT_SOURCE_AUTHENTIC);
+        MarkCreatureLoot(creatureLoot, summoned.entry, sourceOn(summoned.mapId));
 
     for (uint32 mapId : _authenticMaps)
         for (uint8 difficulty = 0; difficulty < MAX_DIFFICULTY; ++difficulty)
             if (DungeonEncounterList const* encounters = sObjectMgr->GetDungeonEncounterList(mapId, Difficulty(difficulty)))
                 for (DungeonEncounter const* encounter : *encounters)
                     if (encounter->creditType == ENCOUNTER_CREDIT_KILL_CREATURE)
-                        MarkCreatureLoot(creatureLoot, encounter->creditEntry, LOOT_SOURCE_AUTHENTIC);
+                        MarkCreatureLoot(creatureLoot, encounter->creditEntry, sourceOn(mapId));
 
     LootSources chestLoot;
     for (auto const& [spawnId, data] : sObjectMgr->GetAllGOData())
         if (GameObjectTemplate const* goInfo = sObjectMgr->GetGameObjectTemplate(data.id))
             if (uint32 const lootId = goInfo->GetLootId())
-                chestLoot[lootId] |= IsAuthenticMap(data.mapid) ? LOOT_SOURCE_AUTHENTIC : LOOT_SOURCE_SCALED;
+                chestLoot[lootId] |= sourceOn(data.mapid)(REGULAR_DIFFICULTY, true);
 
     LootSources references;
     LootSources items;
@@ -283,7 +323,7 @@ std::unordered_set<uint32> CoAContentScaling::CollectAuthenticItems() const
 
     std::unordered_set<uint32> authentic;
     for (auto const& [item, source] : items)
-        if (source == LOOT_SOURCE_AUTHENTIC)
+        if ((source & LOOT_SOURCE_ITEM_MASK) == LOOT_SOURCE_AUTHENTIC)
             authentic.insert(item);
 
     if (QueryResult result = WorldDatabase.Query("SELECT base_item, heroic_item, mythic_item FROM coa_dungeon_loot_variant"))
@@ -291,7 +331,8 @@ std::unordered_set<uint32> CoAContentScaling::CollectAuthenticItems() const
         do
         {
             Field* fields = result->Fetch();
-            if (!authentic.count(fields[0].Get<uint32>()))
+            auto const base = items.find(fields[0].Get<uint32>());
+            if (base == items.end() || (base->second & LOOT_SOURCE_VARIANT_MASK) != LOOT_SOURCE_VARIANT_AUTHENTIC)
                 continue;
 
             for (uint8 tier = 1; tier <= 2; ++tier)
@@ -308,11 +349,12 @@ void CoAContentScaling::ScaleItems()
     if (!_enabled || !sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::ScaleItems, true))
         return;
 
-    if (!_authenticMaps.empty())
+    if (!_authenticMaps.empty() || !_authenticHeroicMaps.empty())
     {
         std::unordered_set<uint32> items = CollectAuthenticItems();
-        LOG_INFO("server.loading", "CoAContentScaling: {} items of {} authentic maps keep their authored levels",
-                 items.size(), _authenticMaps.size());
+        LOG_INFO("server.loading",
+                 "CoAContentScaling: {} items of {} authentic maps and {} authentic Heroic/Mythic dungeons keep "
+                 "their authored levels", items.size(), _authenticMaps.size(), _authenticHeroicMaps.size());
         sItemBudgetScaler->PreserveItems(std::move(items));
     }
 
@@ -328,7 +370,7 @@ void CoAContentScaling::ScaleAccessRequirements()
     uint32 scaled = 0;
     for (GeneratedAccessProfile const& profile : sGeneratedAccessProfiles)
     {
-        if (IsAuthenticMap(profile.mapId))
+        if (IsAuthenticMap(profile.mapId, profile.difficulty))
             continue;
 
         auto* access = const_cast<DungeonProgressionRequirements*>(
@@ -1177,9 +1219,9 @@ namespace
 
             if (enabled)
             {
-                LocalLevelScaling::AuthenticMapOwner.store([](uint32 mapId) -> bool
+                LocalLevelScaling::AuthenticMapOwner.store([](uint32 mapId, uint8 difficulty) -> bool
                 {
-                    return sCoAContentScaling->IsAuthenticMap(mapId);
+                    return sCoAContentScaling->IsAuthenticMap(mapId, difficulty);
                 }, std::memory_order_relaxed);
 
                 LocalLevelScaling::QuestBaseLevelOwner.store([](Quest const* quest) -> int32
@@ -1373,9 +1415,19 @@ namespace
 
         void OnInitializeLockedDungeons(Player* player, uint8& /*level*/, uint32& lockData, lfg::LFGDungeonData const* dungeon) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !player || !dungeon ||
-                sCoAContentScaling->IsAuthenticMap(dungeon->map))
+            if (!sCoAContentScaling->IsEnabled() || !player || !dungeon)
                 return;
+
+            if (sCoAContentScaling->IsAuthenticMap(dungeon->map, dungeon->difficulty))
+            {
+                uint8 const minLevel = sCoAContentScaling->GetAuthenticMinLevel(dungeon->map, dungeon->difficulty,
+                    dungeon->minlevel);
+                if (player->GetLevel() < minLevel)
+                    lockData = lfg::LFG_LOCKSTATUS_TOO_LOW_LEVEL;
+                else if (minLevel != dungeon->minlevel && lockData == lfg::LFG_LOCKSTATUS_TOO_LOW_LEVEL)
+                    lockData = 0;
+                return;
+            }
 
             auto const* lfgProf = FindGeneratedLfgProfile(dungeon->id);
             if (!lfgProf)
@@ -1754,8 +1806,15 @@ namespace
         void OnResolveDungeonAccessLevels(Player const* player, uint32 mapId, Difficulty difficulty,
             uint8& minLevel, uint8& maxLevel) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !player || sCoAContentScaling->IsAuthenticMap(mapId))
+            if (!sCoAContentScaling->IsEnabled() || !player)
                 return;
+
+            if (sCoAContentScaling->IsAuthenticMap(mapId, difficulty))
+            {
+                if (!IsRetrievingOwnCorpse(player, mapId))
+                    minLevel = sCoAContentScaling->GetAuthenticMinLevel(mapId, difficulty, minLevel);
+                return;
+            }
 
             if (IsRetrievingOwnCorpse(player, mapId))
             {

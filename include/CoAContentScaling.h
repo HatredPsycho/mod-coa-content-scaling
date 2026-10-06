@@ -76,10 +76,13 @@ public:
     [[nodiscard]] bool IsDebugEnabled() const { return _debug; }
 
     // Maps played at their authored levels: no creature, access, loot or item from them is scaled.
-    // Read once at startup, like the layout, because the items cut at startup cannot follow a reload.
-    [[nodiscard]] bool IsAuthenticMap(uint32 mapId) const { return _authenticMaps.count(mapId) != 0; }
+    // Some are authentic on every difficulty, others only on Heroic and Mythic. Read once at startup,
+    // like the layout, because the items cut at startup cannot follow a reload.
+    [[nodiscard]] bool IsAuthenticMap(uint32 mapId, uint8 difficulty = 0) const;
     [[nodiscard]] bool IsAuthenticMap(Map const* map) const;
-    [[nodiscard]] std::unordered_set<uint32> const& GetAuthenticMaps() const { return _authenticMaps; }
+    // The level an authentic map asks for: as authored, raised to AuthenticHeroicMinLevel on the
+    // Heroic and Mythic difficulties of the dungeons in AuthenticHeroicMaps.
+    [[nodiscard]] uint8 GetAuthenticMinLevel(uint32 mapId, uint8 difficulty, uint8 authoredMinLevel) const;
 
     [[nodiscard]] uint64 GetCreatureHookCalls() const { return _creatureHookCalls.load(std::memory_order_relaxed); }
     [[nodiscard]] uint64 GetCreatureScaleApplied() const { return _creatureScaleApplied.load(std::memory_order_relaxed); }
@@ -178,6 +181,8 @@ private:
 
     ProgressionLayout _layout;
     std::unordered_set<uint32> _authenticMaps;
+    std::unordered_set<uint32> _authenticHeroicMaps;
+    uint8 _authenticHeroicMinLevel{60};
 
     lfg::LfgCompositionMode _defaultLfgCompositionMode{lfg::LfgCompositionMode::MATCHMAKING};
     uint32 _defaultLfgChallengeSize{0};
