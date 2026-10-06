@@ -46,6 +46,7 @@
 #include <cmath>
 
 void AddCoAContentScalingCommands();
+void AddCoAContentScalingAddonScripts();
 
 CoAContentScaling* CoAContentScaling::Instance()
 {
@@ -1726,4 +1727,5 @@ void AddCoAContentScalingScripts()
     new coa_content_scaling_map();
     AddScaledAuraFeedScripts();
     AddCoAContentScalingCommands();
+    AddCoAContentScalingAddonScripts();
 }

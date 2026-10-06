@@ -24,7 +24,8 @@ set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_SOURCES
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/encounters/wotlk/LichKingAdapter.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/ProgressionLayoutTest.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/LootCreditTest.cpp"
-    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/EncounterAdaptationTest.cpp")
+    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/EncounterAdaptationTest.cpp"
+    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/LfgAddonProtocolTest.cpp")
 
 # The expansion content packs ship inside this module rather than as modules of their own, so
 # there is one copy of each and the loader below calls them directly.
