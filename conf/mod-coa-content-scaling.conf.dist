@@ -42,6 +42,28 @@ CoAContentScaling.Progression.ClassicEnd = 0
 CoAContentScaling.Progression.TbcEnd = 0
 
 #
+# CoAContentScaling.AuthenticMaps
+#     Description: Comma separated map ids played at their authored levels on every difficulty.
+#                  Creatures keep their level, health and damage, entry keeps its authored level
+#                  requirements, loot is not reduced for small groups, and items whose every
+#                  spawned source is on one of these maps keep their authored stats. Destiny Weaver
+#                  does not lift creatures there. Quests are still scaled. Read at startup only.
+#     Default:     309, 509, 409, 469, 531, 230, 229, 429, 289, 329
+#                  "" - Every map is scaled
+#     Raids:       309 - Zul'Gurub
+#                  509 - Ruins of Ahn'Qiraj (AQ20)
+#                  409 - Molten Core
+#                  469 - Blackwing Lair
+#                  531 - Temple of Ahn'Qiraj (AQ40)
+#     Dungeons:    230 - Blackrock Depths
+#                  229 - Blackrock Spire (Lower and Upper)
+#                  429 - Dire Maul
+#                  289 - Scholomance
+#                  329 - Stratholme
+#
+CoAContentScaling.AuthenticMaps = 309, 509, 409, 469, 531, 230, 229, 429, 289, 329
+
+#
 # CoAContentScaling.GroupScaling.Enable
 #     Description: Dynamically scale dungeons and raids based on group size (1..N players).
 #     Default:     1 - Enabled

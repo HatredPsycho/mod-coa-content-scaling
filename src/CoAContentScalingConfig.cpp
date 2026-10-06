@@ -23,6 +23,29 @@ namespace CoAContentScalingConfig
         return std::string(str.substr(start, end - start));
     }
 
+    std::unordered_set<uint32> ParseMapList(std::string_view raw)
+    {
+        std::unordered_set<uint32> maps;
+        while (!raw.empty())
+        {
+            size_t const comma = raw.find(',');
+            std::string const token = Trim(raw.substr(0, comma));
+            raw = comma == std::string_view::npos ? std::string_view() : raw.substr(comma + 1);
+
+            if (token.empty())
+                continue;
+
+            if (std::all_of(token.begin(), token.end(), [](unsigned char c) { return std::isdigit(c); }) &&
+                token.size() <= 9)
+                maps.insert(static_cast<uint32>(std::stoul(token)));
+            else
+                LOG_WARN("module.coa_content_scaling",
+                         "CoAContentScaling: Ignoring '{}' in AuthenticMaps, it is not a map id.", token);
+        }
+
+        return maps;
+    }
+
     std::string ParseProgressionMode(std::string_view raw)
     {
         std::string s = Trim(raw);

@@ -14,6 +14,7 @@
 #include "SpellAuraDefines.h"
 #include <optional>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 struct ItemTemplate;
@@ -237,11 +238,16 @@ public:
     [[nodiscard]] bool AreItemsScaled() const { return _itemsScaled; }
     void ResetScaledState() { _itemsScaled = false; }
 
+    // Items that keep their authored template: loot of maps played at their authored levels.
+    void PreserveItems(std::unordered_set<uint32> items) { _preservedItems = std::move(items); }
+    [[nodiscard]] bool IsPreservedItem(uint32 itemEntry) const { return _preservedItems.count(itemEntry) != 0; }
+
 private:
     ItemBudgetScaler() = default;
 
     bool _itemsScaled{false};
     std::unordered_map<uint32, AppliedItemScaling> _appliedScaling;
+    std::unordered_set<uint32> _preservedItems;
 };
 
 #define sItemBudgetScaler ItemBudgetScaler::Instance()

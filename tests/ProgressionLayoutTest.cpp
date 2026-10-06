@@ -617,6 +617,18 @@ TEST(CoAConfigTest, ParseSoloAssistMode)
     EXPECT_EQ(CoAContentScalingConfig::ParseSoloAssistMode(""), SoloAssistMode::NONE);
 }
 
+TEST(CoAConfigTest, ParseMapList)
+{
+    EXPECT_TRUE(CoAContentScalingConfig::ParseMapList("").empty());
+    EXPECT_TRUE(CoAContentScalingConfig::ParseMapList(" , ,").empty());
+
+    std::unordered_set<uint32> const maps = CoAContentScalingConfig::ParseMapList(" 409, 469 ,531,,409");
+    EXPECT_EQ(maps, (std::unordered_set<uint32>{ 409, 469, 531 }));
+
+    std::unordered_set<uint32> const mixed = CoAContentScalingConfig::ParseMapList("229, MC, -5, 12a, 230");
+    EXPECT_EQ(mixed, (std::unordered_set<uint32>{ 229, 230 }));
+}
+
 TEST(CoAConfigTest, ParseLfgCompositionMode)
 {
     EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("Matchmaking"), lfg::LfgCompositionMode::MATCHMAKING);
@@ -1497,6 +1509,23 @@ TEST(SourceGraphAuthorityTest, WarglaiveOfAzzinothIsRaidEndNotPinnacle)
     EXPECT_TRUE(ctx.hasGeneratedProfile);
     EXPECT_EQ(ctx.tier, ContentTier::RAID_END);
     EXPECT_EQ(ctx.sourceMap, 564u);
+}
+
+TEST(SourceGraphAuthorityTest, PreservedItemsKeepTheirTemplate)
+{
+    ItemTemplate warglaive;
+    warglaive.ItemId = 32837;
+    warglaive.ItemLevel = 156;
+    warglaive.RequiredLevel = 70;
+
+    sItemBudgetScaler->PreserveItems({ 32837 });
+    ItemScalingContext const preserved = ItemScalingContext::Resolve(&warglaive);
+    sItemBudgetScaler->PreserveItems({});
+
+    EXPECT_EQ(preserved.policy, ItemScalingPolicy::PRESERVE);
+    EXPECT_EQ(preserved.tier, ContentTier::RAID_END);
+    EXPECT_EQ(preserved.sourceMap, 564u);
+    EXPECT_NE(ItemScalingContext::Resolve(&warglaive).policy, ItemScalingPolicy::PRESERVE);
 }
 
 TEST(SourceGraphAuthorityTest, SunwellItemsPreserveRaidPinnacle)

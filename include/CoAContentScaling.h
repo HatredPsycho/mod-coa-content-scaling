@@ -18,6 +18,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 class Creature;
 class Player;
@@ -73,6 +74,12 @@ public:
     [[nodiscard]] float GetWorldLeechPercent() const { return _worldLeechPercent.load(std::memory_order_relaxed); }
     [[nodiscard]] bool IsAdaptiveMechanicsEnabled() const { return _adaptiveMechanicsEnabled; }
     [[nodiscard]] bool IsDebugEnabled() const { return _debug; }
+
+    // Maps played at their authored levels: no creature, access, loot or item from them is scaled.
+    // Read once at startup, like the layout, because the items cut at startup cannot follow a reload.
+    [[nodiscard]] bool IsAuthenticMap(uint32 mapId) const { return _authenticMaps.count(mapId) != 0; }
+    [[nodiscard]] bool IsAuthenticMap(Map const* map) const;
+    [[nodiscard]] std::unordered_set<uint32> const& GetAuthenticMaps() const { return _authenticMaps; }
 
     [[nodiscard]] uint64 GetCreatureHookCalls() const { return _creatureHookCalls.load(std::memory_order_relaxed); }
     [[nodiscard]] uint64 GetCreatureScaleApplied() const { return _creatureScaleApplied.load(std::memory_order_relaxed); }
@@ -144,6 +151,8 @@ public:
 private:
     CoAContentScaling() = default;
 
+    [[nodiscard]] std::unordered_set<uint32> CollectAuthenticItems() const;
+
     bool _enabled{false};
     bool _tbcEnabled{false};
     bool _wotlkEnabled{false};
@@ -168,6 +177,7 @@ private:
     uint8 _customTbcEnd{0};
 
     ProgressionLayout _layout;
+    std::unordered_set<uint32> _authenticMaps;
 
     lfg::LfgCompositionMode _defaultLfgCompositionMode{lfg::LfgCompositionMode::MATCHMAKING};
     uint32 _defaultLfgChallengeSize{0};

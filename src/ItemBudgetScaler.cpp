@@ -130,6 +130,20 @@ ItemScalingContext ItemScalingContext::Resolve(ItemTemplate const* proto)
         return ctx;
     }
 
+    if (sItemBudgetScaler->IsPreservedItem(proto->ItemId))
+    {
+        ctx.specialFlags |= ITEM_SPECIAL_PRESERVE;
+        ctx.policy = ItemScalingPolicy::PRESERVE;
+        if (auto const* prof = FindGeneratedItemProfile(proto->ItemId))
+        {
+            ctx.hasGeneratedProfile = true;
+            ctx.era = prof->era;
+            ctx.tier = prof->tier;
+            ctx.sourceMap = prof->sourceMap;
+        }
+        return ctx;
+    }
+
     // 1. Retain generated source and safety metadata; resolve era through registry priorities.
     if (auto const* prof = FindGeneratedItemProfile(proto->ItemId))
     {
