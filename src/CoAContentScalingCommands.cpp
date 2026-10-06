@@ -490,12 +490,20 @@ private:
         return true;
     }
 
-    static bool HandleLfgMode(ChatHandler* handler, std::string const& modeArg)
+    static bool HandleLfgMode(ChatHandler* handler, Optional<std::string> modeArgument)
     {
         Player* player = handler->GetPlayer();
         if (!player)
             return false;
 
+        if (!modeArgument)
+        {
+            HandleLfgStatus(handler);
+            handler->SendSysMessage("Usage: .lfgmode [matchmaking | bots | party]");
+            return true;
+        }
+
+        std::string const& modeArg = *modeArgument;
         if (modeArg == "matchmaking" || modeArg == "real" || modeArg == "normal")
         {
             sCoAContentScaling->SetPlayerLfgMode(player->GetGUID(), lfg::LfgCompositionMode::MATCHMAKING);
@@ -525,12 +533,20 @@ private:
         return true;
     }
 
-    static bool HandleLfgChallenge(ChatHandler* handler, std::string const& challengeArg)
+    static bool HandleLfgChallenge(ChatHandler* handler, Optional<std::string> challengeArgument)
     {
         Player* player = handler->GetPlayer();
         if (!player)
             return false;
 
+        if (!challengeArgument)
+        {
+            HandleLfgStatus(handler);
+            handler->SendSysMessage("Usage: .lfgchallenge [adaptive | 1..40]");
+            return true;
+        }
+
+        std::string const& challengeArg = *challengeArgument;
         if (challengeArg == "adaptive" || challengeArg == "auto" || challengeArg == "0")
         {
             sCoAContentScaling->SetPlayerLfgChallenge(player->GetGUID(), 0);

@@ -102,7 +102,7 @@ In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Si
 | `.lfgmode [matchmaking\|bots\|party]` | Sets personal dungeon finder composition mode (standard queue, bot fill, or partial party). |
 | `.lfgchallenge [adaptive\|1..40]` | Sets instance scaling challenge target (adaptive to group size, or fixed simulated player count). |
 
-The settings are kept per character. In a group the leader's setting decides. Random bots never set one and keep
+Without an argument both commands show the current settings. The settings are kept per character. In a group the leader's setting decides. Random bots never set one and keep
 `LFG.DefaultMode`.
 
 ### CoALFGMode Addon
