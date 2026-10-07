@@ -13,8 +13,12 @@
 #include "Log.h"
 #include "ObjectMgr.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <iterator>
+#include <map>
 #include <optional>
+#include <vector>
 
 namespace
 {
@@ -110,6 +114,26 @@ namespace
         }
 
         return std::nullopt;
+    }
+
+    constexpr uint32 MaximumPriceCurveLevel = 300;
+    constexpr uint32 AnyKind = 0xFF;
+
+    // A robe is a chest piece by its price.
+    uint64 PriceKey(uint32 itemClass, uint32 subClass, uint32 inventoryType, uint32 quality)
+    {
+        if (inventoryType == INVTYPE_ROBE)
+            inventoryType = INVTYPE_CHEST;
+        return (uint64(itemClass & 0xFF) << 24) | (uint64(subClass & 0xFF) << 16) | (uint64(inventoryType & 0xFF) << 8) |
+            uint64(quality & 0xFF);
+    }
+
+    // The narrow kind first: a cloth chest of its quality, a herb of its quality. Then every item of its
+    // class and quality, for a kind with too few levels of its own.
+    std::array<uint64, 2> PriceKeys(ItemTemplate const* proto)
+    {
+        return { PriceKey(proto->Class, proto->SubClass, proto->InventoryType, proto->Quality),
+                 PriceKey(proto->Class, AnyKind, AnyKind, proto->Quality) };
     }
 }
 
@@ -437,12 +461,20 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
     uint32 preservedCustom = 0;
     uint32 specialReview = 0;
     uint32 actuallyMutated = 0;
+    _priceSamples.clear();
+    _priceCurves.clear();
+    _handPricedItems.clear();
 
     for (auto& [itemId, itemTemplate] : *itemTemplates)
     {
         ++totalTemplates;
         ItemTemplate* proto = const_cast<ItemTemplate*>(&itemTemplate);
         ItemScalingContext const ctx = ItemScalingContext::Resolve(proto);
+
+        if (ctx.specialFlags & ITEM_SPECIAL_CUSTOM)
+            _handPricedItems.insert(proto->ItemId);
+        else
+            CollectPriceSample(proto);
 
         if (ctx.hasGeneratedProfile)
             ++generatedProfilesUsed;
@@ -471,6 +503,7 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
         }
     }
 
+    FinishPriceCurves();
     _itemsScaled = true;
 
     LOG_INFO("server.loading", ">> UniversalContentScaling: Item scaling summary:");
@@ -533,4 +566,91 @@ float ItemBudgetScaler::GetRatingMultiplier(uint32 itemEntry) const
 {
     std::optional<AppliedItemScaling> const applied = ResolveAppliedScaling(itemEntry);
     return applied ? applied->ratingMultiplier : 1.0f;
+}
+
+void ItemBudgetScaler::CollectPriceSample(ItemTemplate const* proto)
+{
+    if (!proto->SellPrice || !proto->ItemLevel || proto->ItemLevel > MaximumPriceCurveLevel)
+        return;
+
+    for (uint64 const key : PriceKeys(proto))
+        _priceSamples[key][proto->ItemLevel].push_back(double(proto->SellPrice));
+}
+
+// The median price of each level, filled in between the levels that have items and never falling as the
+// level rises: a few cheap items at one level must not make a higher level worth less. A kind with items
+// at fewer than three levels gives no curve of its own.
+void ItemBudgetScaler::FinishPriceCurves()
+{
+    for (auto& [key, levels] : _priceSamples)
+    {
+        if (levels.size() < 3)
+            continue;
+
+        std::map<uint32, double> medians;
+        for (auto& [level, prices] : levels)
+        {
+            std::sort(prices.begin(), prices.end());
+            std::size_t const middle = prices.size() / 2;
+            medians[level] = prices.size() % 2 ? prices[middle] : (prices[middle - 1] + prices[middle]) / 2.0;
+        }
+
+        std::vector<double>& curve = _priceCurves[key];
+        curve.assign(MaximumPriceCurveLevel + 1, 0.0);
+        double highest = 0.0;
+        auto upper = medians.begin();
+        for (uint32 level = medians.begin()->first; level <= medians.rbegin()->first; ++level)
+        {
+            while (upper->first < level)
+                ++upper;
+            double price = upper->second;
+            if (upper->first != level)
+            {
+                auto const lower = std::prev(upper);
+                double const share = double(level - lower->first) / double(upper->first - lower->first);
+                price = lower->second + (upper->second - lower->second) * share;
+            }
+            highest = std::max(highest, price);
+            curve[level] = highest;
+        }
+    }
+    _priceSamples.clear();
+}
+
+double ItemBudgetScaler::PriceAt(uint64 key, uint32 itemLevel) const
+{
+    auto const curve = _priceCurves.find(key);
+    return curve != _priceCurves.end() && itemLevel < curve->second.size() ? curve->second[itemLevel] : 0.0;
+}
+
+uint32 ItemBudgetScaler::ScaleMarketValue(uint32 itemEntry, uint32 value) const
+{
+    if (!value || _handPricedItems.count(itemEntry) || _handPricedItems.count(LocalLevelScaling::BaseItemEntry(itemEntry)))
+        return value;
+
+    std::optional<AppliedItemScaling> const applied = ResolveAppliedScaling(itemEntry);
+    if (!applied || !applied->authoredItemLevel || !applied->effectiveItemLevel ||
+        applied->authoredItemLevel == applied->effectiveItemLevel)
+        return value;
+
+    ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemEntry);
+    if (!proto)
+        return value;
+
+    // Where no curve reaches both levels, prices follow the square of the item level, as vendor prices
+    // roughly do.
+    double const levelRatio = double(applied->effectiveItemLevel) / double(applied->authoredItemLevel);
+    double ratio = levelRatio * levelRatio;
+    for (uint64 const key : PriceKeys(proto))
+    {
+        double const authored = PriceAt(key, applied->authoredItemLevel);
+        double const effective = PriceAt(key, applied->effectiveItemLevel);
+        if (authored > 0.0 && effective > 0.0)
+        {
+            ratio = effective / authored;
+            break;
+        }
+    }
+
+    return uint32(std::clamp(std::round(double(value) * ratio), 1.0, double(UINT32_MAX)));
 }

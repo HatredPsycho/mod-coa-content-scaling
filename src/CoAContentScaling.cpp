@@ -1271,6 +1271,15 @@ namespace
                     return value > 0 ? std::max(1, scaled) : std::min(-1, scaled);
                 }, std::memory_order_relaxed);
 
+                // What an item is worth to those who price it by its vendor value: moved to the level
+                // the item has on this realm, the way its statistics were.
+                LocalLevelScaling::ItemMarketValueOwner.store([](uint32 itemEntry, uint32 value) -> uint32
+                {
+                    if (!sCoAContentScaling->IsEnabled())
+                        return value;
+                    return sItemBudgetScaler->ScaleMarketValue(itemEntry, value);
+                }, std::memory_order_relaxed);
+
                 // An enchantment, a gem and a socket bonus are all the same kind of entry and all
                 // ride on an item that was cut, so the host's factor is the one that applies.
                 LocalLevelScaling::ItemEnchantmentAmountOwner.store(
@@ -1389,6 +1398,7 @@ namespace
                 LocalLevelScaling::AreaContentLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureArmorOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEffectValueOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::ItemMarketValueOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ItemEnchantmentAmountOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::EnchantmentRequiredLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMoneyMaxLevelOwner.store(nullptr, std::memory_order_relaxed);

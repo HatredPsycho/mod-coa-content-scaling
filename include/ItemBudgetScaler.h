@@ -12,10 +12,12 @@
 #include "ProgressionLayout.h"
 #include "SharedDefines.h"
 #include "SpellAuraDefines.h"
+#include <map>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 struct ItemTemplate;
 
@@ -242,12 +244,25 @@ public:
     void PreserveItems(std::unordered_set<uint32> items) { _preservedItems = std::move(items); }
     [[nodiscard]] bool IsPreservedItem(uint32 itemEntry) const { return _preservedItems.count(itemEntry) != 0; }
 
+    // What an item is worth at the level it was given: its authored value moved along the vendor prices
+    // of items of its kind, from the item level it was written for to the one it has now. A custom item's
+    // price was set by hand for this realm and stays.
+    [[nodiscard]] uint32 ScaleMarketValue(uint32 itemEntry, uint32 value) const;
+
 private:
     ItemBudgetScaler() = default;
+
+    void CollectPriceSample(ItemTemplate const* proto);
+    void FinishPriceCurves();
+    [[nodiscard]] double PriceAt(uint64 key, uint32 itemLevel) const;
 
     bool _itemsScaled{false};
     std::unordered_map<uint32, AppliedItemScaling> _appliedScaling;
     std::unordered_set<uint32> _preservedItems;
+    // Vendor prices by item level for each kind of item, from the authored templates.
+    std::unordered_map<uint64, std::map<uint32, std::vector<double>>> _priceSamples;
+    std::unordered_map<uint64, std::vector<double>> _priceCurves;
+    std::unordered_set<uint32> _handPricedItems;
 };
 
 #define sItemBudgetScaler ItemBudgetScaler::Instance()
