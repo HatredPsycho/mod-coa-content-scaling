@@ -654,3 +654,12 @@ uint32 ItemBudgetScaler::ScaleMarketValue(uint32 itemEntry, uint32 value) const
 
     return uint32(std::clamp(std::round(double(value) * ratio), 1.0, double(UINT32_MAX)));
 }
+
+uint32 ItemBudgetScaler::AuthoredItemLevel(uint32 itemEntry, uint32 itemLevel) const
+{
+    AppliedItemScaling const* base = FindAppliedScaling(LocalLevelScaling::BaseItemEntry(itemEntry));
+    if (!base || !base->effectiveItemLevel || base->authoredItemLevel == base->effectiveItemLevel)
+        return itemLevel;
+
+    return uint32(std::lround(double(itemLevel) * base->authoredItemLevel / base->effectiveItemLevel));
+}

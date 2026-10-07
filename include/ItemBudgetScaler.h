@@ -249,6 +249,10 @@ public:
     // price was set by hand for this realm and stays.
     [[nodiscard]] uint32 ScaleMarketValue(uint32 itemEntry, uint32 value) const;
 
+    // The item level an item was written with, given the one it has here. A lifted copy is measured from
+    // the item it copies, so its lift carries over in proportion.
+    [[nodiscard]] uint32 AuthoredItemLevel(uint32 itemEntry, uint32 itemLevel) const;
+
 private:
     ItemBudgetScaler() = default;
 
