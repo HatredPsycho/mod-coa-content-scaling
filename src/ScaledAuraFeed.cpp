@@ -5,6 +5,7 @@
 
 #include "ScaledAuraFeed.h"
 #include "Chat.h"
+#include "CoAContentScaling.h"
 #include "CoAContentScalingConfig.h"
 #include "Config.h"
 #include "ItemBudgetScaler.h"
@@ -237,6 +238,9 @@ std::string DescribeItemEffects(ItemTemplate const* proto, std::vector<uint32> c
     for (uint8 spellSlot = 0; spellSlot < MAX_ITEM_PROTO_SPELLS; ++spellSlot)
         CollectSpellAmounts(uint32(proto->Spells[spellSlot].SpellId), statMultiplier, ratingMultiplier,
             visited, 0, body);
+
+    if (sCoAContentScaling->GetLayout().journey)
+        return body;
 
     CollectEnchantmentAmounts(proto->socketBonus, statMultiplier, ratingMultiplier, body);
 
