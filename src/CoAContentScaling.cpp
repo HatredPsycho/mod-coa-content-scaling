@@ -1293,9 +1293,36 @@ namespace
                 DungeonDamageMultiplier(target, attacker)));
         }
 
+        // Scripted lethal and percentage-of-health damage keeps its size.
+        static bool KeepsItsSize(int64 damage, SpellInfo const* spellInfo)
+        {
+            if (damage >= 10000000)
+                return true;
+            if (spellInfo)
+                for (uint8 i = 0; i < MAX_SPELL_EFFECTS; ++i)
+                    if (spellInfo->Effects[i].Effect == SPELL_EFFECT_INSTAKILL ||
+                        spellInfo->Effects[i].ApplyAuraName == SPELL_AURA_PERIODIC_DAMAGE_PERCENT)
+                        return true;
+            return false;
+        }
+
+        // On the journey a moved creature's spells still carry the numbers of its original level.
+        static double JourneySpellFactor(Unit const* attacker, int64 damage, SpellInfo const* spellInfo)
+        {
+            if (!sCoAContentScaling->GetLayout().journey || KeepsItsSize(damage, spellInfo))
+                return 1.0;
+            return sJourneyContent->GetSpellFactor(attacker);
+        }
+
         void ModifySpellDamageTaken(Unit* target, Unit* attacker, int32& damage, SpellInfo const* spellInfo) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || damage <= 0)
+            if (!sCoAContentScaling->IsEnabled() || damage <= 0)
+                return;
+
+            if (double const factor = JourneySpellFactor(attacker, damage, spellInfo); factor < 1.0)
+                damage = std::max<int32>(1, int32(std::lround(double(damage) * factor)));
+
+            if (!sCoAContentScaling->IsGroupScalingEnabled())
                 return;
 
             if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon() ||
@@ -1330,7 +1357,16 @@ namespace
 
         void ModifyPeriodicDamageAurasTick(Unit* target, Unit* attacker, uint32& damage, SpellInfo const* spellInfo) override
         {
-            if (!sCoAContentScaling->IsEnabled() || !sCoAContentScaling->IsGroupScalingEnabled() || damage == 0)
+            if (!sCoAContentScaling->IsEnabled() || damage == 0)
+                return;
+
+            // The same hook carries heals over time; those are left alone.
+            bool const harmful = !(spellInfo && spellInfo->IsPositive()) &&
+                !(target && attacker && target->IsFriendlyTo(attacker));
+            if (double const factor = harmful ? JourneySpellFactor(attacker, damage, spellInfo) : 1.0; factor < 1.0)
+                damage = std::max<uint32>(1, uint32(std::lround(double(damage) * factor)));
+
+            if (!sCoAContentScaling->IsGroupScalingEnabled())
                 return;
 
             if (!attacker || !attacker->IsCreature() || !attacker->GetMap() || !attacker->GetMap()->IsDungeon() ||

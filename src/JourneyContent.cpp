@@ -123,6 +123,7 @@ void JourneyContent::BuildCreatures(journey::Rules const& rules, JourneySettings
 
         int const originalMin = cinfo->minlevel;
         int const originalMax = cinfo->maxlevel;
+        uint8 const originalExpansion = uint8(cinfo->expansion);
         journey::Era const era = journey::CreatureEra(spawned, spawned ? map->second : 0, originalMax,
             heroic != heroicOf.end(), cinfo->rank == CREATURE_ELITE_WORLDBOSS);
         journey::CreaturePlan const plan = rules.PlanCreature(originalMin, originalMax, era);
@@ -141,7 +142,8 @@ void JourneyContent::BuildCreatures(journey::Rules const& rules, JourneySettings
         if (settings.journeyBaseStats && onTheWay)
             cinfo->expansion = 0;
 
-        _shifts[entry] = { uint8(originalMin), uint8(originalMax), uint8(plan.minLevel), uint8(plan.maxLevel) };
+        _shifts[entry] = { uint8(originalMin), uint8(originalMax), uint8(plan.minLevel), uint8(plan.maxLevel),
+            originalExpansion, uint8(cinfo->expansion) };
         ++report.creaturesMoved;
     }
 }
@@ -301,6 +303,41 @@ int JourneyContent::OriginalLevel(Creature const* creature) const
     double const place = s.newMax > s.newMin ?
         double(std::clamp<int>(now, s.newMin, s.newMax) - s.newMin) / double(s.newMax - s.newMin) : 0.0;
     return int(std::lround(s.originalMin + place * (s.originalMax - s.originalMin)));
+}
+
+namespace
+{
+    // What a blow is worth at a level: the weapon damage and attack power of that level's base stats.
+    double HitAt(uint8 level, uint8 unitClass, uint8 expansion)
+    {
+        CreatureBaseStats const* stats = sObjectMgr->GetCreatureBaseStats(level, unitClass);
+        if (!stats)
+            return 0.0;
+        return stats->BaseDamage[std::min<uint8>(expansion, MAX_EXPANSIONS - 1)] + stats->AttackPower / 14.0 * 2.0;
+    }
+}
+
+double JourneyContent::GetSpellFactor(Unit const* attacker) const
+{
+    if (!IsBuilt() || !attacker)
+        return 1.0;
+
+    Creature const* creature = attacker->ToCreature();
+    if (!creature)
+        if (Unit const* owner = attacker->GetCharmerOrOwner())
+            creature = owner->ToCreature();
+    if (!creature || creature->IsControlledByPlayer())
+        return 1.0;
+
+    CreatureTemplate const* cinfo = creature->GetCreatureTemplate();
+    auto const shift = cinfo ? _shifts.find(cinfo->Entry) : _shifts.end();
+    if (shift == _shifts.end())
+        return 1.0;
+
+    uint8 const now = std::clamp<uint8>(creature->GetLevel(), 1, 255);
+    uint8 const was = uint8(std::clamp(OriginalLevel(creature), 1, 255));
+    return journey::SpellLevelFactor(HitAt(was, cinfo->unit_class, shift->second.originalExpansion),
+        HitAt(now, cinfo->unit_class, shift->second.newExpansion));
 }
 
 uint8 JourneyContent::GetWindowLevel(Player const* viewer, Creature const* creature, uint8 ownLevel) const

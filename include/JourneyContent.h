@@ -19,6 +19,7 @@
 
 class Creature;
 class Player;
+class Unit;
 
 struct JourneySettings
 {
@@ -54,6 +55,9 @@ public:
     [[nodiscard]] std::optional<journey::QuestPlan> GetQuestPlan(uint32 questId) const;
     [[nodiscard]] std::optional<uint8> GetInstanceEntry(uint32 mapId, uint8 difficulty) const;
 
+    // How hard a creature's spells - or those of its totems and summons - hit on the journey.
+    [[nodiscard]] double GetSpellFactor(Unit const* attacker) const;
+
     // Where a lifted creature stands for a viewer: its place in its zone, inside the window around the viewer.
     [[nodiscard]] uint8 GetWindowLevel(Player const* viewer, Creature const* creature, uint8 ownLevel) const;
 
@@ -71,6 +75,8 @@ private:
         uint8 originalMax;
         uint8 newMin;
         uint8 newMax;
+        uint8 originalExpansion;
+        uint8 newExpansion;
     };
 
     struct ZonePlace

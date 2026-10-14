@@ -197,6 +197,13 @@ namespace journey
         }
     }
 
+    double SpellLevelFactor(double hitAtOriginalLevel, double hitAtNewLevel)
+    {
+        if (hitAtOriginalLevel <= 0.0 || hitAtNewLevel <= 0.0 || hitAtNewLevel >= hitAtOriginalLevel)
+            return 1.0;
+        return hitAtNewLevel / hitAtOriginalLevel;
+    }
+
     uint32_t ScaleMoney(uint32_t money, int from, int to)
     {
         if (!money || from <= 0 || to >= from)

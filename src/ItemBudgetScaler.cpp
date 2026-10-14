@@ -287,6 +287,20 @@ ScaledItemBudget ItemBudgetScaler::CalculateItemBudget(ItemTemplate const* proto
     if (ctx.policy == ItemScalingPolicy::PRESERVE)
         return budget;
 
+    // On the journey an item's required level follows the journey, and its item level follows that required level.
+    if (layout.journey)
+    {
+        journey::ItemPlan const plan = layout.journeyRules.PlanItem(int(proto->Quality), int(proto->RequiredLevel),
+            int(proto->ItemLevel));
+        if (plan.era == journey::ITEM_KEEP)
+            return budget;
+
+        budget.effectiveRequiredLevel = std::min<uint32>(uint32(std::max(plan.requiredLevel, 0)), layout.maxLevel);
+        budget.effectiveItemLevel = uint32(std::max(plan.itemLevel, 1));
+        ApplyItemLevelCut(proto, budget);
+        return budget;
+    }
+
     // 1. Required level scaling
     //
     // What an item asks of its wearer tracks where the item belongs, so it is read the same way a
@@ -316,23 +330,26 @@ ScaledItemBudget ItemBudgetScaler::CalculateItemBudget(ItemTemplate const* proto
         newIlvl = MapThroughBand(proto->ItemLevel, *band);
 
     budget.effectiveItemLevel = newIlvl;
-
-    if (proto->ItemLevel > 0 && budget.effectiveItemLevel < proto->ItemLevel)
-    {
-        float const ilvlRatio = float(budget.effectiveItemLevel) / float(proto->ItemLevel);
-        budget.statMultiplier = std::clamp<float>(ilvlRatio, 0.20f, 1.0f);
-
-        // Combat rating scaling: ratings provide inflated % at lower level without deflation
-        float const levelRatio = (proto->RequiredLevel > 0) ?
-            (float(budget.effectiveRequiredLevel) / float(proto->RequiredLevel)) : ilvlRatio;
-        budget.ratingMultiplier = std::clamp<float>(budget.statMultiplier * (levelRatio * levelRatio), 0.15f, 1.0f);
-
-        budget.armorMultiplier = budget.statMultiplier;
-        budget.weaponDpsMultiplier = budget.statMultiplier;
-        budget.spellPowerMultiplier = budget.statMultiplier;
-    }
-
+    ApplyItemLevelCut(proto, budget);
     return budget;
+}
+
+void ItemBudgetScaler::ApplyItemLevelCut(ItemTemplate const* proto, ScaledItemBudget& budget)
+{
+    if (proto->ItemLevel == 0 || budget.effectiveItemLevel >= proto->ItemLevel)
+        return;
+
+    float const ilvlRatio = float(budget.effectiveItemLevel) / float(proto->ItemLevel);
+    budget.statMultiplier = std::clamp<float>(ilvlRatio, 0.20f, 1.0f);
+
+    // Combat rating scaling: ratings provide inflated % at lower level without deflation
+    float const levelRatio = (proto->RequiredLevel > 0) ?
+        (float(budget.effectiveRequiredLevel) / float(proto->RequiredLevel)) : ilvlRatio;
+    budget.ratingMultiplier = std::clamp<float>(budget.statMultiplier * (levelRatio * levelRatio), 0.15f, 1.0f);
+
+    budget.armorMultiplier = budget.statMultiplier;
+    budget.weaponDpsMultiplier = budget.statMultiplier;
+    budget.spellPowerMultiplier = budget.statMultiplier;
 }
 
 uint32 ItemBudgetScaler::ScaleRequiredAverageItemLevel(uint32 authoredItemLevel, ContentEra era,
@@ -340,6 +357,17 @@ uint32 ItemBudgetScaler::ScaleRequiredAverageItemLevel(uint32 authoredItemLevel,
 {
     if (!authoredItemLevel || layout.IsStockIdentity())
         return authoredItemLevel;
+
+    // On the journey a requirement is read on the endgame ladder its expansion's rewards were laid over.
+    if (layout.journey)
+    {
+        if (era != ContentEra::TBC && era != ContentEra::WotLK)
+            return authoredItemLevel;
+        int const requiredLevel = era == ContentEra::TBC ? 70 : 80;
+        journey::ItemPlan const plan =
+            layout.journeyRules.PlanItem(ITEM_QUALITY_EPIC, requiredLevel, int(authoredItemLevel));
+        return plan.era == journey::ITEM_KEEP ? authoredItemLevel : uint32(std::max(plan.itemLevel, 1));
+    }
 
     // A requirement is met with gear, so it is read through the band of the content whose drops
     // reach that level - the lowest tier that does. Reading it through the tier of the instance that

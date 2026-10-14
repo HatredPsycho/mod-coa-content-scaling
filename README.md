@@ -57,6 +57,8 @@ On the journey the loaded creature templates are rewritten at startup (levels, g
 the old world), quests are given the levels of the map whoever starts them stands on, instances open at their journey
 entry, and the Dungeon Finder offers every dungeon from that entry to the cap. Outland and Northrend scale for a
 character like the old world does, and the level window places a lifted creature by its place in its zone.
+A moved creature's spells shrink with what a blow is worth at its new level, and items follow the journey's
+item plan: required level by the journey, item level by that required level, top rewards on the endgame ladder.
 
 ### 2. Combat Budget Normalization (Creature Stats)
 In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Simply lowering a creature's level in memory still uses the WotLK expansion multiplier table.

@@ -255,6 +255,9 @@ public:
 private:
     ItemBudgetScaler() = default;
 
+    // Cuts statistics, ratings, armor, weapon damage and spell power by the item level the budget gives.
+    static void ApplyItemLevelCut(ItemTemplate const* proto, ScaledItemBudget& budget);
+
     void CollectPriceSample(ItemTemplate const* proto);
     void FinishPriceCurves();
     [[nodiscard]] double PriceAt(uint64 key, uint32 itemLevel) const;

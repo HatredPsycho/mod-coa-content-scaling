@@ -98,6 +98,10 @@ namespace journey
     /// Northrend.
     int PartOf(Era era);
 
+    /// How hard a moved creature's spells hit now: the numbers in its spells are those of its original level, so they
+    /// shrink with what a blow is worth at its new level against its original one. Never raised.
+    double SpellLevelFactor(double hitAtOriginalLevel, double hitAtNewLevel);
+
     /// Money goes with the square of the level, roughly; it shrinks with it.
     uint32_t ScaleMoney(uint32_t money, int from, int to);
 

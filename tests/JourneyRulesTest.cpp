@@ -4,6 +4,8 @@
  */
 
 #include "CoAContentScalingConfig.h"
+#include "ItemBudgetScaler.h"
+#include "ItemTemplate.h"
 #include "ContentEraResolver.h"
 #include "JourneyData.h"
 #include "JourneyRules.h"
@@ -461,4 +463,70 @@ TEST(JourneyEraTest, TheZoneTableNamesTheEraOfAZone)
     EXPECT_EQ(sContentEraResolver->ResolveEraForQuest(4, 3483, 0, 60), ContentEra::Classic);
 
     sContentEraResolver->Clear();
+}
+
+TEST(JourneyRulesTest, AMovedCreaturesSpellsShrinkWithWhatABlowIsWorth)
+{
+    EXPECT_DOUBLE_EQ(journey::SpellLevelFactor(100.0, 50.0), 0.5);
+    EXPECT_DOUBLE_EQ(journey::SpellLevelFactor(100.0, 150.0), 1.0);
+    EXPECT_DOUBLE_EQ(journey::SpellLevelFactor(100.0, 100.0), 1.0);
+    EXPECT_DOUBLE_EQ(journey::SpellLevelFactor(0.0, 10.0), 1.0);
+    EXPECT_DOUBLE_EQ(journey::SpellLevelFactor(10.0, 0.0), 1.0);
+}
+
+namespace
+{
+    ItemTemplate JourneyItem(uint32 entry, uint32 quality, uint32 requiredLevel, uint32 itemLevel)
+    {
+        ItemTemplate item;
+        item.ItemId = entry;
+        item.Quality = quality;
+        item.RequiredLevel = requiredLevel;
+        item.ItemLevel = itemLevel;
+        return item;
+    }
+}
+
+TEST(JourneyItemTest, AnItemFollowsTheJourneyPlan)
+{
+    ProgressionLayout const layout = ProgressionLayout::CreateJourney(60, true, true, journey::Shape{});
+
+    ItemTemplate const green = JourneyItem(12345, ITEM_QUALITY_UNCOMMON, 30, 35);
+    ScaledItemBudget const greenBudget = sItemBudgetScaler->CalculateItemBudget(&green, layout);
+    EXPECT_EQ(greenBudget.effectiveRequiredLevel, 19u);
+    EXPECT_EQ(greenBudget.effectiveItemLevel, 24u);
+    EXPECT_NEAR(greenBudget.statMultiplier, 24.0f / 35.0f, 1e-5f);
+    float const levelRatio = 19.0f / 30.0f;
+    EXPECT_NEAR(greenBudget.ratingMultiplier, std::max(0.15f, (24.0f / 35.0f) * levelRatio * levelRatio), 1e-5f);
+    EXPECT_FLOAT_EQ(greenBudget.armorMultiplier, greenBudget.statMultiplier);
+
+    ItemTemplate const warglaive = JourneyItem(32837, ITEM_QUALITY_EPIC, 70, 156);
+    ScaledItemBudget const warglaiveBudget = sItemBudgetScaler->CalculateItemBudget(&warglaive, layout);
+    EXPECT_EQ(warglaiveBudget.effectiveRequiredLevel, 60u);
+    EXPECT_EQ(warglaiveBudget.effectiveItemLevel, 105u);
+    EXPECT_LT(warglaiveBudget.statMultiplier, 1.0f);
+
+    // The raids of the old world and their rewards stay at 60.
+    ItemTemplate const blackwing = JourneyItem(19354, ITEM_QUALITY_EPIC, 60, 76);
+    ScaledItemBudget const blackwingBudget = sItemBudgetScaler->CalculateItemBudget(&blackwing, layout);
+    EXPECT_EQ(blackwingBudget.effectiveRequiredLevel, 60u);
+    EXPECT_EQ(blackwingBudget.effectiveItemLevel, 76u);
+    EXPECT_FLOAT_EQ(blackwingBudget.statMultiplier, 1.0f);
+
+    // A preserved custom range keeps its template on the journey too.
+    ItemTemplate const cosmetic = JourneyItem(150000, ITEM_QUALITY_EPIC, 60, 80);
+    ScaledItemBudget const cosmeticBudget = sItemBudgetScaler->CalculateItemBudget(&cosmetic, layout);
+    EXPECT_EQ(cosmeticBudget.effectiveRequiredLevel, 60u);
+    EXPECT_EQ(cosmeticBudget.effectiveItemLevel, 80u);
+}
+
+TEST(JourneyItemTest, AnInstanceItemLevelRequirementIsReadOnTheEndgameLadder)
+{
+    ProgressionLayout const layout = ProgressionLayout::CreateJourney(60, true, true, journey::Shape{});
+
+    EXPECT_EQ(sItemBudgetScaler->ScaleRequiredAverageItemLevel(200, ContentEra::WotLK, layout), 95u);
+    EXPECT_EQ(sItemBudgetScaler->ScaleRequiredAverageItemLevel(115, ContentEra::TBC, layout), 78u);
+    EXPECT_EQ(sItemBudgetScaler->ScaleRequiredAverageItemLevel(60, ContentEra::Classic, layout), 60u);
+    EXPECT_LT(sItemBudgetScaler->ScaleRequiredAverageItemLevel(115, ContentEra::TBC, layout),
+              sItemBudgetScaler->ScaleRequiredAverageItemLevel(200, ContentEra::WotLK, layout));
 }
