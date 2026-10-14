@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "name": "Journey: an item asks for the journey's level and carries the item level of that level",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1, Progression.Mode=Journey, TBC.Enable=1 and WotLK.Enable=1 at the default journey shape, and CoA.CreatureScaling.Enable=0 (conf/verify-all-scaling.json). Dirigible Crash Helmet (25981, Outland green, required level 60, item level 87) was made for 60 and becomes required level Outland(60) = 33, item level 87 x 38 / 94.17 = 35. Benevolent Hood (35814, Northrend green, 68, item level 138) was made for 70 and becomes Northrend(70) = 43, item level 138 x 48 / 139.5 = 47. Idol of the Ferocious (1550, epic, 60, item level 70) is a reward of the old world's raids and stays as it is. Added items carry no native scaling level, so their own templates are read.",
+  "timeout_ms": 60000,
+  "players": [
+    {
+      "id": "carrier",
+      "race": 6,
+      "class": 11,
+      "level": 60
+    }
+  ],
+  "steps": [
+    {
+      "action": "add_item",
+      "actor": "carrier",
+      "item": 25981
+    },
+    {
+      "action": "add_item",
+      "actor": "carrier",
+      "item": 35814
+    },
+    {
+      "action": "add_item",
+      "actor": "carrier",
+      "item": 1550
+    },
+    {
+      "action": "assert",
+      "label": "Outland green asks for Outland(60)",
+      "actor": "carrier",
+      "metric": "carried_item_required_level",
+      "item": 25981,
+      "equals": 33
+    },
+    {
+      "action": "assert",
+      "label": "Outland green carries item level 35",
+      "actor": "carrier",
+      "metric": "carried_item_level",
+      "item": 25981,
+      "equals": 35
+    },
+    {
+      "action": "assert",
+      "label": "Northrend green asks for Northrend(70)",
+      "actor": "carrier",
+      "metric": "carried_item_required_level",
+      "item": 35814,
+      "equals": 43
+    },
+    {
+      "action": "assert",
+      "label": "Northrend green carries item level 47",
+      "actor": "carrier",
+      "metric": "carried_item_level",
+      "item": 35814,
+      "equals": 47
+    },
+    {
+      "action": "assert",
+      "label": "The old world's raid reward stays at 60",
+      "actor": "carrier",
+      "metric": "carried_item_required_level",
+      "item": 1550,
+      "equals": 60
+    },
+    {
+      "action": "assert",
+      "label": "and at item level 70",
+      "actor": "carrier",
+      "metric": "carried_item_level",
+      "item": 1550,
+      "equals": 70
+    }
+  ]
+}

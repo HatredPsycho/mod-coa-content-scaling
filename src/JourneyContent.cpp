@@ -17,6 +17,7 @@
 #include "JourneyData.h"
 #include "LFGMgr.h"
 #include "Map.h"
+#include "MapMgr.h"
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "QuestDef.h"
@@ -68,6 +69,7 @@ JourneyBuildReport JourneyContent::Build(journey::Rules const& rules, JourneySet
 
     BuildPlaces(rules);
     BuildCreatures(rules, settings, keepMap, report);
+    RelevelLoadedCreatures(report);
     BuildQuests(rules, report);
     BuildDungeonFinder(report);
     if (settings.trainers)
@@ -170,6 +172,25 @@ void JourneyContent::BuildCreatures(journey::Rules const& rules, JourneySettings
     }
 }
 
+void JourneyContent::RelevelLoadedCreatures(JourneyBuildReport& report)
+{
+    // The transports, the battlefields and outdoor PvP load their grids before the world is initialized, so some
+    // creatures were made from the authored templates; they are made again from the journey's.
+    sMapMgr->DoForAllMaps([this, &report](Map* map)
+    {
+        for (auto const& [spawnId, creature] : map->GetCreatureBySpawnIdStore())
+        {
+            if (!creature || !_shifts.count(creature->GetEntry()))
+                continue;
+
+            creature->UpdateEntry(creature->GetEntry(), creature->GetCreatureData(), true);
+            if (creature->IsAlive())
+                creature->SetFullHealth();
+            ++report.creaturesRelevelled;
+        }
+    });
+}
+
 void JourneyContent::BuildQuests(journey::Rules const& rules, JourneyBuildReport& report)
 {
     // The map of whoever or whatever starts a quest.
@@ -199,15 +220,26 @@ void JourneyContent::BuildQuests(journey::Rules const& rules, JourneyBuildReport
         if (!quest)
             continue;
 
+        // The reward is read as the journey will have it: its items are laid over the journey before anyone can
+        // take the quest, so an Outland green made for 60 asks for Outland's 33, not for 60.
         int rewardLevel = 0;
-        auto considerReward = [&rewardLevel](uint32 itemId)
+        auto considerReward = [&rewardLevel, &rules](uint32 itemId)
         {
             if (!itemId)
                 return;
             ItemTemplate const* proto = sObjectMgr->GetItemTemplate(itemId);
             bool const equipment = proto && (proto->Class == ITEM_CLASS_WEAPON || proto->Class == ITEM_CLASS_ARMOR);
-            if (equipment && proto->RequiredLevel > 1)
-                rewardLevel = std::max(rewardLevel, int(proto->RequiredLevel));
+            if (!equipment || proto->RequiredLevel <= 1)
+                return;
+
+            int required = int(proto->RequiredLevel);
+            if (ItemScalingContext::Resolve(proto).policy != ItemScalingPolicy::PRESERVE)
+            {
+                journey::ItemPlan const plan = rules.PlanItem(int(proto->Quality), required, int(proto->ItemLevel));
+                if (plan.era != journey::ITEM_KEEP)
+                    required = plan.requiredLevel;
+            }
+            rewardLevel = std::max(rewardLevel, required);
         };
         for (uint32 itemId : quest->RewardItemId)
             considerReward(itemId);

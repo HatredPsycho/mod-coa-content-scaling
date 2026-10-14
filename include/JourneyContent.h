@@ -43,6 +43,7 @@ struct JourneyBuildReport
 {
     uint32 creatureTemplates{0};
     uint32 creaturesMoved{0};
+    uint32 creaturesRelevelled{0};
     uint32 questsMoved{0};
     uint32 dungeonFinderEntries{0};
     uint32 trainerSpells{0};
@@ -118,6 +119,7 @@ private:
 
     void BuildCreatures(journey::Rules const& rules, JourneySettings const& settings,
         std::function<bool(uint32, uint8)> const& keepMap, JourneyBuildReport& report);
+    void RelevelLoadedCreatures(JourneyBuildReport& report);
     void BuildQuests(journey::Rules const& rules, JourneyBuildReport& report);
     void BuildPlaces(journey::Rules const& rules);
     void BuildDungeonFinder(JourneyBuildReport& report);

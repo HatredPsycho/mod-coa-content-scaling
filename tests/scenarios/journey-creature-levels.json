@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "name": "Journey: creatures of the old world, Outland and Northrend spawn at their journey levels",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1, Progression.Mode=Journey, TBC.Enable=1 and WotLK.Enable=1 at the default journey shape, and CoA.CreatureScaling.Enable=0 (conf/verify-all-scaling.json). The creature templates are rewritten at startup by the map most of their spawns are on. Coyote (834, Westfall, authored 10-11) is old-world content: Classic(10) = Classic(11) = 7. Starving Helboar (16879, Hellfire Peninsula, 58-59) is Outland's: Outland(58) = 30, Outland(59) = 31. Giant Tidecrawler (23929, Northrend, 68-69) is Northrend's: Northrend(68) = 40, Northrend(69) = 42. Native levels are read, not a character's view.",
+  "timeout_ms": 120000,
+  "players": [
+    {
+      "id": "scout",
+      "race": 2,
+      "class": 1,
+      "level": 60
+    }
+  ],
+  "steps": [
+    {
+      "action": "set_phase",
+      "actor": "scout",
+      "value": 1
+    },
+    {
+      "action": "teleport",
+      "actor": "scout",
+      "map": 0,
+      "x": -9742.64,
+      "y": 971.8,
+      "z": 30.14,
+      "o": 0.0
+    },
+    {
+      "action": "wait",
+      "ms": 2000
+    },
+    {
+      "action": "assert",
+      "label": "Westfall Coyote: spawned at the journey's levels 7-7",
+      "actor": "scout",
+      "metric": "nearby_creature_count",
+      "entry": 834,
+      "min_level": 7,
+      "max_level": 7,
+      "min": 1,
+      "within_ms": 10000
+    },
+    {
+      "action": "assert",
+      "label": "Westfall Coyote: none above 7",
+      "actor": "scout",
+      "metric": "nearby_creature_count",
+      "entry": 834,
+      "min_level": 8,
+      "max_level": 255,
+      "equals": 0
+    },
+    {
+      "action": "teleport",
+      "actor": "scout",
+      "map": 530,
+      "x": -1115.87,
+      "y": 2413.64,
+      "z": 26.68,
+      "o": 0.0
+    },
+    {
+      "action": "wait",
+      "ms": 2000
+    },
+    {
+      "action": "assert",
+      "label": "Hellfire Starving Helboar: spawned at the journey's levels 30-31",
+      "actor": "scout",
+      "metric": "nearby_creature_count",
+      "entry": 16879,
+      "min_level": 30,
+      "max_level": 31,
+      "min": 1,
+      "within_ms": 10000
+    },
+    {
+      "action": "assert",
+      "label": "Hellfire Starving Helboar: none above 31",
+      "actor": "scout",
+      "metric": "nearby_creature_count",
+      "entry": 16879,
+      "min_level": 32,
+      "max_level": 255,
+      "equals": 0
+    },
+    {
+      "action": "teleport",
+      "actor": "scout",
+      "map": 571,
+      "x": 2119.83,
+      "y": -6118.03,
+      "z": 4.8,
+      "o": 0.0
+    },
+    {
+      "action": "wait",
+      "ms": 2000
+    },
+    {
+      "action": "assert",
+      "label": "Northrend Giant Tidecrawler: spawned at the journey's levels 40-42",
+      "actor": "scout",
+      "metric": "nearby_creature_count",
+      "entry": 23929,
+      "min_level": 40,
+      "max_level": 42,
+      "min": 1,
+      "within_ms": 10000
+    },
+    {
+      "action": "assert",
+      "label": "Northrend Giant Tidecrawler: none above 42",
+      "actor": "scout",
+      "metric": "nearby_creature_count",
+      "entry": 23929,
+      "min_level": 43,
+      "max_level": 255,
+      "equals": 0
+    }
+  ]
+}

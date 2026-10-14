@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "name": "Journey: a lifted creature stands by its place in its zone, inside the window around the character",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1, Progression.Mode=Journey, TBC.Enable=1 and WotLK.Enable=1 at the default journey shape, and CoA.CreatureScaling.Enable=0 (conf/verify-all-scaling.json). Also DestinyWeaver.Enable=1 and DestinyWeaver.LevelScaling=1 with CoAContentScaling.Journey.Window.* at 1, 2, 2. Elwynn Forest opens at 1. A level-1 creature stands at the bottom of the zone, so it is shown two levels below a character who chose scaling: 57 to a level-59 character, 28 to a level-30 one. A level-10 creature stands at the top, so it is shown two above: 61 to a level-59 character - the offset rule alone would show it at 55. Without the choice the creature keeps its own level.",
+  "timeout_ms": 60000,
+  "location": {
+    "map": 0,
+    "x": -9465,
+    "y": 64,
+    "z": 56,
+    "o": 0
+  },
+  "players": [
+    {
+      "id": "high",
+      "race": 1,
+      "class": 1,
+      "level": 59
+    },
+    {
+      "id": "mid",
+      "race": 1,
+      "class": 1,
+      "level": 30
+    }
+  ],
+  "creatures": [
+    {
+      "id": "bottom",
+      "owner": "high",
+      "entry": 1501,
+      "level": 1,
+      "health": 40,
+      "distance": 3
+    },
+    {
+      "id": "top",
+      "owner": "high",
+      "entry": 1501,
+      "level": 10,
+      "health": 400,
+      "distance": 5
+    },
+    {
+      "id": "bottom_mid",
+      "owner": "mid",
+      "entry": 1501,
+      "level": 1,
+      "health": 40,
+      "distance": 3
+    }
+  ],
+  "steps": [
+    {
+      "action": "wait",
+      "ms": 5000
+    },
+    {
+      "action": "level_scaling_packet",
+      "actor": "high",
+      "value": 0
+    },
+    {
+      "action": "assert",
+      "label": "Without the choice the creature keeps its own level",
+      "actor": "high",
+      "metric": "view_level",
+      "target": "bottom",
+      "equals": 1,
+      "within_ms": 2000
+    },
+    {
+      "action": "level_scaling_packet",
+      "actor": "high",
+      "value": 1
+    },
+    {
+      "action": "level_scaling_packet",
+      "actor": "mid",
+      "value": 1
+    },
+    {
+      "action": "assert",
+      "label": "The zone's lowest creature stands two below a level-59 character",
+      "actor": "high",
+      "metric": "view_level",
+      "target": "bottom",
+      "equals": 57,
+      "within_ms": 2000
+    },
+    {
+      "action": "assert",
+      "label": "The zone's highest creature stands two above a level-59 character",
+      "actor": "high",
+      "metric": "view_level",
+      "target": "top",
+      "equals": 61,
+      "within_ms": 2000
+    },
+    {
+      "action": "assert",
+      "label": "The zone's lowest creature stands two below a level-30 character",
+      "actor": "mid",
+      "metric": "view_level",
+      "target": "bottom_mid",
+      "equals": 28,
+      "within_ms": 2000
+    }
+  ]
+}

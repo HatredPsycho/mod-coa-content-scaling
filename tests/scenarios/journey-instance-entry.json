@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "name": "Journey: Outland and Northrend dungeons open at their journey entry levels",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1, Progression.Mode=Journey, TBC.Enable=1 and WotLK.Enable=1 at the default journey shape, and CoA.CreatureScaling.Enable=0 (conf/verify-all-scaling.json). Hellfire Ramparts (543) asks for 55 as authored; its creatures average 61, so on the journey it opens at max(30, Outland(58)) = 30. Utgarde Keep (574) asks for 65 and its creatures average 70: max(40, Northrend(67)) - Northrend below 68 is the old world's Classic(67) = 43. A character one level below is turned away at the door; the teleport goes through the native access check.",
+  "timeout_ms": 90000,
+  "location": {
+    "map": 530,
+    "x": -360.0,
+    "y": 3070.0,
+    "z": -15.0,
+    "o": 0
+  },
+  "players": [
+    {
+      "id": "ramparts",
+      "race": 2,
+      "class": 1,
+      "level": 30
+    },
+    {
+      "id": "ramparts_low",
+      "race": 2,
+      "class": 1,
+      "level": 29
+    },
+    {
+      "id": "keep",
+      "race": 2,
+      "class": 1,
+      "level": 43
+    },
+    {
+      "id": "keep_low",
+      "race": 2,
+      "class": 1,
+      "level": 42
+    }
+  ],
+  "steps": [
+    {
+      "action": "teleport",
+      "actor": "ramparts",
+      "map": 543,
+      "x": -1355.24,
+      "y": 1641.12,
+      "z": 68.2491,
+      "o": 0.0
+    },
+    {
+      "action": "teleport",
+      "actor": "ramparts_low",
+      "map": 543,
+      "x": -1355.24,
+      "y": 1641.12,
+      "z": 68.2491,
+      "o": 0.0
+    },
+    {
+      "action": "teleport",
+      "actor": "keep",
+      "map": 574,
+      "x": 153.789,
+      "y": -86.548,
+      "z": 12.551,
+      "o": 0.0
+    },
+    {
+      "action": "teleport",
+      "actor": "keep_low",
+      "map": 574,
+      "x": 153.789,
+      "y": -86.548,
+      "z": 12.551,
+      "o": 0.0
+    },
+    {
+      "action": "wait",
+      "ms": 3000
+    },
+    {
+      "action": "assert",
+      "label": "Level 30 enters Hellfire Ramparts",
+      "actor": "ramparts",
+      "metric": "map_id",
+      "equals": 543,
+      "within_ms": 10000
+    },
+    {
+      "action": "assert",
+      "label": "Level 29 stays outside Hellfire Ramparts",
+      "actor": "ramparts_low",
+      "metric": "map_id",
+      "equals": 530
+    },
+    {
+      "action": "assert",
+      "label": "Level 43 enters Utgarde Keep",
+      "actor": "keep",
+      "metric": "map_id",
+      "equals": 574,
+      "within_ms": 10000
+    },
+    {
+      "action": "assert",
+      "label": "Level 42 stays outside Utgarde Keep",
+      "actor": "keep_low",
+      "metric": "map_id",
+      "equals": 530
+    }
+  ]
+}

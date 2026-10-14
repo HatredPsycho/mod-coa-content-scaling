@@ -204,6 +204,11 @@ void CoAContentScaling::FinalizeAndInitialize()
     _layoutInitialized = true;
     InitializeLayout();
 
+    // The realm's own creature multipliers were tuned for the authored world; on top of a moved one they double up.
+    if (sConfigMgr->GetOption<bool>("CoA.CreatureScaling.Enable", false, false))
+        LOG_WARN("server.loading", "CoAContentScaling: CoA.CreatureScaling.Enable is on beside content scaling; its "
+                 "health and damage multipliers apply on top of the moved creatures.");
+
     // 2. Load calibrated boss flex profiles
     sInstanceScalingMgr->LoadCalibratedBossFlex();
 
@@ -234,10 +239,10 @@ void CoAContentScaling::LoadContentEras()
     // equipment reward asks for.
     JourneyBuildReport const report = sJourneyContent->Build(_layout.journeyRules, _journeySettings, _layout.maxLevel,
         [this](uint32 mapId, uint8 difficulty) { return IsAuthenticMap(mapId, difficulty); });
-    LOG_INFO("server.loading", "CoAContentScaling: the journey moved {} of {} creature templates, {} quests, "
-             "{} Dungeon Finder entries, {} trainer spells and {} battlegrounds", report.creaturesMoved,
-             report.creatureTemplates, report.questsMoved, report.dungeonFinderEntries, report.trainerSpells,
-             report.battlegrounds);
+    LOG_INFO("server.loading", "CoAContentScaling: the journey moved {} of {} creature templates ({} already "
+             "spawned made again), {} quests, {} Dungeon Finder entries, {} trainer spells and {} battlegrounds",
+             report.creaturesMoved, report.creatureTemplates, report.creaturesRelevelled, report.questsMoved,
+             report.dungeonFinderEntries, report.trainerSpells, report.battlegrounds);
 }
 
 void CoAContentScaling::ScaleEnchantments()

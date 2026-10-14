@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "Journey: an Outland quest stands at its journey level, not at its reward's authored level",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1, Progression.Mode=Journey, TBC.Enable=1 and WotLK.Enable=1 at the default journey shape (conf/verify-all-scaling.json). In Case of Emergency... (10161) is a Hellfire Peninsula quest of level 61 that opens at 58, started on Outland, open to every race without a quest before it, and rewards a green of required level 60 and item level 87 (25981). On the journey its level follows Outland: Outland(61) = 34 and Outland(58) = 30. Its reward is a journey item too - an Outland green made for level 60, required level Outland(60) = 33 - so the reward does not lift the quest, as mod-world-journey reads the reward after its items are on the journey.",
+  "timeout_ms": 60000,
+  "location": { "map": 530, "x": 228.5, "y": 2633.0, "z": 87.3, "o": 0 },
+  "players": [
+    { "id": "below", "race": 2, "class": 1, "level": 29 },
+    { "id": "entry", "race": 2, "class": 1, "level": 30 }
+  ],
+  "steps": [
+    { "action": "wait", "ms": 1000 },
+    { "action": "assert", "label": "The quest stands at its journey level, Outland(61)", "actor": "entry", "metric": "quest_level", "quest": 10161, "equals": 34 },
+    { "action": "assert", "label": "A character of the journey's entry level may take it", "actor": "entry", "metric": "quest_takeable", "quest": 10161, "equals": 1 },
+    { "action": "assert", "label": "One level below the journey's entry level may not", "actor": "below", "metric": "quest_takeable", "quest": 10161, "equals": 0 }
+  ]
+}

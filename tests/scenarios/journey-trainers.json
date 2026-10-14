@@ -1,0 +1,153 @@
+{
+  "schema": 1,
+  "name": "Journey: riding is taught at the journey's levels",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1, Progression.Mode=Journey, TBC.Enable=1 and WotLK.Enable=1 at the default journey shape, and CoA.CreatureScaling.Enable=0 (conf/verify-all-scaling.json). Randal Hunter (4732) teaches Apprentice Riding (33388) at 20 and Journeyman Riding (33391) at 40 as authored. On the journey they are Classic(20) = 13 and Classic(40) = 26. The trainer window's row state is read: 0 available, 1 unavailable.",
+  "timeout_ms": 60000,
+  "location": {
+    "map": 0,
+    "x": -9441.0,
+    "y": -1390.0,
+    "z": 46.7,
+    "o": 0
+  },
+  "players": [
+    {
+      "id": "apprentice",
+      "race": 1,
+      "class": 1,
+      "level": 13
+    },
+    {
+      "id": "too_young",
+      "race": 1,
+      "class": 1,
+      "level": 12
+    },
+    {
+      "id": "journeyman",
+      "race": 1,
+      "class": 1,
+      "level": 26
+    },
+    {
+      "id": "almost",
+      "race": 1,
+      "class": 1,
+      "level": 25
+    }
+  ],
+  "creatures": [
+    {
+      "id": "trainer_apprentice",
+      "owner": "apprentice",
+      "entry": 4732,
+      "faction": 12,
+      "distance": 2
+    },
+    {
+      "id": "trainer_too_young",
+      "owner": "too_young",
+      "entry": 4732,
+      "faction": 12,
+      "distance": 2
+    },
+    {
+      "id": "trainer_journeyman",
+      "owner": "journeyman",
+      "entry": 4732,
+      "faction": 12,
+      "distance": 2
+    },
+    {
+      "id": "trainer_almost",
+      "owner": "almost",
+      "entry": 4732,
+      "faction": 12,
+      "distance": 2
+    }
+  ],
+  "steps": [
+    {
+      "action": "learn",
+      "actor": "journeyman",
+      "spell": 33388
+    },
+    {
+      "action": "learn",
+      "actor": "almost",
+      "spell": 33388
+    },
+    {
+      "action": "gossip_hello",
+      "actor": "apprentice",
+      "target": "trainer_apprentice"
+    },
+    {
+      "action": "gossip_select",
+      "actor": "apprentice",
+      "option": 0
+    },
+    {
+      "action": "gossip_hello",
+      "actor": "too_young",
+      "target": "trainer_too_young"
+    },
+    {
+      "action": "gossip_select",
+      "actor": "too_young",
+      "option": 0
+    },
+    {
+      "action": "gossip_hello",
+      "actor": "journeyman",
+      "target": "trainer_journeyman"
+    },
+    {
+      "action": "gossip_select",
+      "actor": "journeyman",
+      "option": 0
+    },
+    {
+      "action": "gossip_hello",
+      "actor": "almost",
+      "target": "trainer_almost"
+    },
+    {
+      "action": "gossip_select",
+      "actor": "almost",
+      "option": 0
+    },
+    {
+      "action": "assert",
+      "label": "Apprentice Riding is available at 13",
+      "actor": "apprentice",
+      "metric": "trainer_window_state",
+      "spell": 33388,
+      "equals": 0
+    },
+    {
+      "action": "assert",
+      "label": "and not at 12",
+      "actor": "too_young",
+      "metric": "trainer_window_state",
+      "spell": 33388,
+      "equals": 1
+    },
+    {
+      "action": "assert",
+      "label": "Journeyman Riding is available at 26",
+      "actor": "journeyman",
+      "metric": "trainer_window_state",
+      "spell": 33391,
+      "equals": 0
+    },
+    {
+      "action": "assert",
+      "label": "and not at 25",
+      "actor": "almost",
+      "metric": "trainer_window_state",
+      "spell": 33391,
+      "equals": 1
+    }
+  ]
+}

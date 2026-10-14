@@ -99,6 +99,17 @@ In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Si
 
 ---
 
+### Journey gameplay scenarios
+`tests/scenarios/journey-*.json` hold the journey layout to its levels on a running worldserver: creatures, quests,
+instance entries, the level window, riding trainers and items. They need the journey configured, so they run with the
+scaling line's own verification settings, as exploratory scenario files:
+
+```bash
+python -B tools/verify_all.py --settings conf/verify-all-scaling.json --stages gameplay     --scenario modules/mod-coa-content-scaling/tests/scenarios/journey-*.json
+```
+
+---
+
 ## In-Game Diagnostics & Commands
 
 ### Administration (`.coascale`)
