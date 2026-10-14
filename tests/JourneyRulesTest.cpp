@@ -530,3 +530,49 @@ TEST(JourneyItemTest, AnInstanceItemLevelRequirementIsReadOnTheEndgameLadder)
     EXPECT_LT(sItemBudgetScaler->ScaleRequiredAverageItemLevel(115, ContentEra::TBC, layout),
               sItemBudgetScaler->ScaleRequiredAverageItemLevel(200, ContentEra::WotLK, layout));
 }
+
+TEST(JourneyRulesTest, RidingAndProfessionStepsFollowTheJourney)
+{
+    journey::Rules const rules = DefaultRules();
+
+    EXPECT_EQ(rules.TrainerLevel(33388, 20), 13);
+    EXPECT_EQ(rules.TrainerLevel(33391, 40), rules.Classic(40));
+    EXPECT_EQ(rules.TrainerLevel(34090, 60), 33);
+    EXPECT_EQ(rules.TrainerLevel(2259, 65), rules.Outland(65));
+    EXPECT_EQ(rules.TrainerLevel(2259, 75), rules.Northrend(75));
+    EXPECT_EQ(rules.TrainerLevel(2259, 0), 0);
+}
+
+TEST(JourneyRulesTest, EnchantmentsOfOutlandAndNorthrendAskForTheEndOfTheirRoad)
+{
+    journey::Rules const rules = DefaultRules();
+
+    EXPECT_EQ(rules.EnchantmentLevel(70, false, 60), 47);
+    EXPECT_EQ(rules.EnchantmentLevel(60, false, 60), 33);
+    EXPECT_EQ(rules.EnchantmentLevel(80, true, 60), 60);
+    EXPECT_EQ(rules.EnchantmentLevel(80, true, 50), 50);
+    EXPECT_EQ(rules.EnchantmentLevel(35, false, 60), 35);
+
+    EXPECT_EQ(journey::CraftEra(300), journey::ITEM_KEEP);
+    EXPECT_EQ(journey::CraftEra(301), journey::ITEM_TBC);
+    EXPECT_EQ(journey::CraftEra(375), journey::ITEM_TBC);
+    EXPECT_EQ(journey::CraftEra(376), journey::ITEM_WOTLK);
+    EXPECT_EQ(journey::GemEra(23436), journey::ITEM_TBC);
+    EXPECT_EQ(journey::GemEra(40111), journey::ITEM_WOTLK);
+    EXPECT_TRUE(journey::IsEnchantEffect(53));
+    EXPECT_TRUE(journey::IsEnchantEffect(92));
+    EXPECT_FALSE(journey::IsEnchantEffect(6));
+}
+
+TEST(JourneyRulesTest, BattlegroundsAboveTheEndgameOpenAtIt)
+{
+    journey::Rules const rules = DefaultRules();
+    EXPECT_EQ(rules.BattlegroundMinLevel(71), 60);
+    EXPECT_EQ(rules.BattlegroundMinLevel(61), 60);
+    EXPECT_EQ(rules.BattlegroundMinLevel(10), 10);
+
+    journey::Shape shape;
+    shape.endgame = 55;
+    shape.northrendRange = { 40, 50 };
+    EXPECT_EQ(journey::Rules(shape).BattlegroundMinLevel(71), 55);
+}

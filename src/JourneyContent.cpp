@@ -7,9 +7,11 @@
  */
 
 #include "JourneyContent.h"
+#include "BattlegroundMgr.h"
 #include "Creature.h"
 #include "CreatureData.h"
 #include "DBCStores.h"
+#include "ItemBudgetScaler.h"
 #include "ItemTemplate.h"
 #include "JourneyData.h"
 #include "LFGMgr.h"
@@ -17,6 +19,9 @@
 #include "ObjectMgr.h"
 #include "Player.h"
 #include "QuestDef.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
+#include "Trainer.h"
 #include <algorithm>
 #include <map>
 
@@ -49,11 +54,18 @@ JourneyBuildReport JourneyContent::Build(journey::Rules const& rules, JourneySet
 
     _settings = settings;
     _maxPlayerLevel = maxPlayerLevel;
+    _rules = rules;
 
     BuildPlaces(rules);
     BuildCreatures(rules, settings, keepMap, report);
     BuildQuests(rules, report);
     BuildDungeonFinder(report);
+    if (settings.trainers)
+        BuildTrainers(rules, report);
+    if (settings.battlegrounds)
+        BuildBattlegrounds(rules, report);
+    if (settings.enchantments)
+        CollectEnchantmentSources();
 
     _built.store(true, std::memory_order_release);
     return report;
@@ -248,6 +260,187 @@ void JourneyContent::BuildDungeonFinder(JourneyBuildReport& report)
         random->maxlevel = std::max<uint8>(random->minlevel, _maxPlayerLevel);
         ++report.dungeonFinderEntries;
     }
+}
+
+void JourneyContent::BuildTrainers(journey::Rules const& rules, JourneyBuildReport& report)
+{
+    // Riding and the professions; the class trainers teach the classes as CoA made them.
+    for (auto const& [trainerId, trainer] : sObjectMgr->GetTrainers())
+    {
+        if (trainer.GetTrainerType() != Trainer::Type::Mount && trainer.GetTrainerType() != Trainer::Type::Tradeskill)
+            continue;
+
+        for (Trainer::Spell const& constSpell : trainer.GetSpells())
+        {
+            auto& spell = const_cast<Trainer::Spell&>(constSpell);
+            int const level = rules.TrainerLevel(spell.SpellId, spell.ReqLevel);
+            if (level != spell.ReqLevel)
+            {
+                spell.ReqLevel = uint8(std::clamp(level, 1, 255));
+                ++report.trainerSpells;
+            }
+        }
+    }
+}
+
+void JourneyContent::BuildBattlegrounds(journey::Rules const& rules, JourneyBuildReport& report)
+{
+    // The Eye of the Storm, the Strand of the Ancients, the Isle of Conquest: open at the endgame.
+    for (BattlegroundTypeId const id : { BATTLEGROUND_EY, BATTLEGROUND_SA, BATTLEGROUND_IC })
+    {
+        Battleground* bg = sBattlegroundMgr->GetBattlegroundTemplate(id);
+        if (!bg)
+            continue;
+
+        uint32 const level = uint32(rules.BattlegroundMinLevel(int(bg->GetMinLevel())));
+        if (level < bg->GetMinLevel())
+        {
+            bg->SetLevelRange(level, bg->GetMaxLevel());
+            ++report.battlegrounds;
+        }
+    }
+
+    // Each battleground's first bracket takes a character of the endgame.
+    uint32 const endgame = uint32(rules.GetShape().endgame);
+    for (uint32 const mapId : { 30u, 489u, 529u, 566u, 607u, 628u })
+    {
+        PvPDifficultyEntry* first = nullptr;
+        for (uint32 bracket = 0; bracket < MAX_BATTLEGROUND_BRACKETS; ++bracket)
+            if (PvPDifficultyEntry const* entry = GetBattlegroundBracketById(mapId, BattlegroundBracketId(bracket)))
+                if (!first || entry->minLevel < first->minLevel)
+                    first = const_cast<PvPDifficultyEntry*>(entry);
+        if (first && first->minLevel > endgame)
+            first->minLevel = endgame;
+    }
+}
+
+void JourneyContent::CollectEnchantmentSources()
+{
+    // Read from the authored templates, before the items are cut.
+    for (auto const& [entry, proto] : *sObjectMgr->GetItemTemplateStore())
+    {
+        if (proto.Quality >= ITEM_QUALITY_ARTIFACT)
+            continue;
+
+        if (proto.GemProperties && proto.RequiredLevel > 1)
+            if (GemPropertiesEntry const* gem = sGemPropertiesStore.LookupEntry(proto.GemProperties))
+                _enchantmentEras[gem->spellitemenchantement] = journey::GemEra(entry);
+
+        if (proto.socketBonus)
+            _socketBonusItems[proto.socketBonus].push_back(entry);
+
+        if (proto.Class == ITEM_CLASS_RECIPE && proto.RequiredSkillRank > 300)
+            for (_Spell const& spell : proto.Spells)
+                if (spell.SpellId > 0 && spell.SpellTrigger == ITEM_SPELLTRIGGER_LEARN_SPELL_ID)
+                    if (SpellInfo const* info = sSpellMgr->GetSpellInfo(uint32(spell.SpellId)))
+                        for (SpellEffectInfo const& effect : info->GetEffects())
+                            if (journey::IsEnchantEffect(effect.Effect) && effect.MiscValue > 0)
+                                _enchantmentEras[uint32(effect.MiscValue)] =
+                                    journey::CraftEra(int(proto.RequiredSkillRank));
+    }
+
+    for (auto const& [trainerId, trainer] : sObjectMgr->GetTrainers())
+        for (Trainer::Spell const& spell : trainer.GetSpells())
+            if (spell.ReqSkillLine && spell.ReqSkillRank > 300)
+                if (SpellInfo const* info = sSpellMgr->GetSpellInfo(spell.SpellId))
+                    for (SpellEffectInfo const& effect : info->GetEffects())
+                        if (journey::IsEnchantEffect(effect.Effect) && effect.MiscValue > 0)
+                        {
+                            journey::ItemEra const era = journey::CraftEra(int(spell.ReqSkillRank));
+                            auto [known, inserted] = _enchantmentEras.try_emplace(uint32(effect.MiscValue), era);
+                            if (!inserted && era > known->second)
+                                known->second = era;
+                        }
+}
+
+JourneyEnchantmentReport JourneyContent::BuildEnchantments()
+{
+    JourneyEnchantmentReport report;
+    if (!IsBuilt() || !_settings.enchantments)
+        return report;
+
+    // What the top rewards of Outland and of Northrend kept of their statistics.
+    std::array<double, 4> sum{};
+    std::array<uint32, 4> count{};
+    for (auto const& [entry, proto] : *sObjectMgr->GetItemTemplateStore())
+    {
+        AppliedItemScaling const* applied = sItemBudgetScaler->FindAppliedScaling(entry);
+        if (!applied)
+            continue;
+        journey::ItemPlan const plan = _rules.PlanItem(int(proto.Quality), int(applied->authoredRequiredLevel),
+            int(applied->authoredItemLevel));
+        if (plan.endgame && plan.era < sum.size())
+        {
+            sum[plan.era] += applied->statMultiplier;
+            ++count[plan.era];
+        }
+    }
+    std::array<double, 4> endgameRatio{ 1.0, 1.0, 1.0, 1.0 };
+    for (size_t era = 0; era < sum.size(); ++era)
+        if (count[era])
+            endgameRatio[era] = sum[era] / double(count[era]);
+    report.outlandEndgameRatio = float(endgameRatio[journey::ITEM_TBC]);
+    report.northrendEndgameRatio = float(endgameRatio[journey::ITEM_WOTLK]);
+
+    // Shared by things of different levels, the gentler factor wins.
+    std::unordered_map<uint32, double> factors;
+    auto keepMost = [&factors](uint32 enchantmentId, double factor)
+    {
+        auto [known, inserted] = factors.try_emplace(enchantmentId, factor);
+        if (!inserted && factor > known->second)
+            known->second = factor;
+    };
+    for (auto const& [enchantmentId, era] : _enchantmentEras)
+        keepMost(enchantmentId, endgameRatio[era]);
+    for (auto const& [bonus, items] : _socketBonusItems)
+        for (uint32 item : items)
+            if (AppliedItemScaling const* applied = sItemBudgetScaler->FindAppliedScaling(item))
+                keepMost(bonus, applied->statMultiplier);
+
+    for (auto const& [enchantmentId, factor] : factors)
+    {
+        if (factor >= 0.999)
+            continue;
+        auto* entry = const_cast<SpellItemEnchantmentEntry*>(sSpellItemEnchantmentStore.LookupEntry(enchantmentId));
+        if (!entry)
+            continue;
+
+        bool changed = false;
+        for (uint32 i = 0; i < MAX_SPELL_ITEM_ENCHANTMENT_EFFECTS; ++i)
+            if (entry->amount[i] && (entry->type[i] == ITEM_ENCHANTMENT_TYPE_DAMAGE ||
+                entry->type[i] == ITEM_ENCHANTMENT_TYPE_RESISTANCE || entry->type[i] == ITEM_ENCHANTMENT_TYPE_STAT))
+            {
+                entry->amount[i] = std::max<uint32>(1, uint32(std::lround(entry->amount[i] * factor)));
+                changed = true;
+            }
+        report.enchantments += changed;
+    }
+
+    // The level an enchantment of Outland or Northrend asks for follows the journey like the world it comes from.
+    // What an item asks for itself stays the item's.
+    int const top = std::min<int>(_maxPlayerLevel, 60);
+    for (SpellItemEnchantmentEntry const* constEntry : sSpellItemEnchantmentStore)
+    {
+        if (!constEntry)
+            continue;
+        auto const known = _enchantmentEras.find(constEntry->ID);
+        bool const northrend = known != _enchantmentEras.end() ? known->second == journey::ITEM_WOTLK :
+            constEntry->requiredLevel > 70;
+        int const now = _rules.EnchantmentLevel(int(constEntry->requiredLevel), northrend, top);
+        if (now < int(constEntry->requiredLevel))
+        {
+            const_cast<SpellItemEnchantmentEntry*>(constEntry)->requiredLevel = uint32(now);
+            ++report.enchantmentLevels;
+        }
+    }
+    return report;
+}
+
+float JourneyContent::GetQuestXpRate(uint32 questId, float defaultRate) const
+{
+    std::optional<journey::QuestPlan> const plan = GetQuestPlan(questId);
+    int const part = plan ? journey::PartOf(plan->era) : 0;
+    return defaultRate * _settings.questXpRates[std::clamp(part, 0, 3)];
 }
 
 int JourneyContent::GetCreatureShift(Creature const* creature) const

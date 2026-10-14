@@ -59,6 +59,9 @@ entry, and the Dungeon Finder offers every dungeon from that entry to the cap. O
 character like the old world does, and the level window places a lifted creature by its place in its zone.
 A moved creature's spells shrink with what a blow is worth at its new level, and items follow the journey's
 item plan: required level by the journey, item level by that required level, top rewards on the endgame ladder.
+Riding and the professions are taught at the journey's levels, the battlegrounds that opened above 60 open at the
+endgame, gems and the enchantments of Outland's and Northrend's professions are cut by what their game's top rewards
+kept, and quest experience can be tuned per part of the journey.
 
 ### 2. Combat Budget Normalization (Creature Stats)
 In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Simply lowering a creature's level in memory still uses the WotLK expansion multiplier table.

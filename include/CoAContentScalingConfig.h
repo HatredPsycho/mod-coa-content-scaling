@@ -33,6 +33,10 @@ namespace CoAContentScalingConfigKeys
     inline constexpr char const* JourneyWindowEnable = "CoAContentScaling.Journey.Window.Enable";
     inline constexpr char const* JourneyWindowBelow = "CoAContentScaling.Journey.Window.Below";
     inline constexpr char const* JourneyWindowAbove = "CoAContentScaling.Journey.Window.Above";
+    inline constexpr char const* JourneyTrainersEnable = "CoAContentScaling.Journey.Trainers.Enable";
+    inline constexpr char const* JourneyBattlegroundsEnable = "CoAContentScaling.Journey.Battlegrounds.Enable";
+    inline constexpr char const* JourneyEnchantmentsEnable = "CoAContentScaling.Journey.Enchantments.Enable";
+    inline constexpr char const* JourneyQuestXpRate = "CoAContentScaling.Journey.Quests.XpRate";
     inline constexpr char const* JourneyInstancePrefix = "CoAContentScaling.Journey.Instance.";
     inline constexpr char const* GroupScalingEnable = "CoAContentScaling.GroupScaling.Enable";
     inline constexpr char const* GroupScalingLockOnEncounterStart = "CoAContentScaling.GroupScaling.LockOnEncounterStart";

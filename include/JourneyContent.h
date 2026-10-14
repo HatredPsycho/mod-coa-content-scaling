@@ -10,6 +10,7 @@
 #include "Define.h"
 #include "JourneyRules.h"
 #include "LocalLevelScaling.h"
+#include <array>
 #include <atomic>
 #include <functional>
 #include <optional>
@@ -27,6 +28,11 @@ struct JourneySettings
     bool window{true};
     int windowBelow{2};
     int windowAbove{2};
+    bool trainers{true};
+    bool battlegrounds{true};
+    bool enchantments{true};
+    // On top of the core's quest experience rate, for the old world, Outland, Northrend and the endgame.
+    std::array<float, 4> questXpRates{ 1.0f, 1.0f, 1.0f, 1.0f };
 };
 
 struct JourneyBuildReport
@@ -35,6 +41,16 @@ struct JourneyBuildReport
     uint32 creaturesMoved{0};
     uint32 questsMoved{0};
     uint32 dungeonFinderEntries{0};
+    uint32 trainerSpells{0};
+    uint32 battlegrounds{0};
+};
+
+struct JourneyEnchantmentReport
+{
+    uint32 enchantments{0};
+    uint32 enchantmentLevels{0};
+    float outlandEndgameRatio{1.0f};
+    float northrendEndgameRatio{1.0f};
 };
 
 class JourneyContent
@@ -47,7 +63,14 @@ public:
     JourneyBuildReport Build(journey::Rules const& rules, JourneySettings const& settings, uint8 maxPlayerLevel,
         std::function<bool(uint32 mapId, uint8 difficulty)> const& keepMap);
 
+    // Gems, the enchantments of Outland's and Northrend's professions and socket bonuses, once the items are cut:
+    // by what the top rewards of their game kept of their statistics, or by what their item kept.
+    JourneyEnchantmentReport BuildEnchantments();
+
     [[nodiscard]] bool IsBuilt() const { return _built.load(std::memory_order_acquire); }
+
+    // The experience rate a quest pays on the journey, given the core's own.
+    [[nodiscard]] float GetQuestXpRate(uint32 questId, float defaultRate) const;
 
     // The levels a zone or an instance set by hand moved its creatures by.
     [[nodiscard]] int GetCreatureShift(Creature const* creature) const;
@@ -90,6 +113,9 @@ private:
     void BuildQuests(journey::Rules const& rules, JourneyBuildReport& report);
     void BuildPlaces(journey::Rules const& rules);
     void BuildDungeonFinder(JourneyBuildReport& report);
+    void BuildTrainers(journey::Rules const& rules, JourneyBuildReport& report);
+    void BuildBattlegrounds(journey::Rules const& rules, JourneyBuildReport& report);
+    void CollectEnchantmentSources();
 
     [[nodiscard]] int OriginalLevel(Creature const* creature) const;
 
@@ -104,6 +130,10 @@ private:
     std::unordered_map<uint32, int> _mapShifts;
     std::unordered_map<uint32, ZonePlace> _zones;
     std::unordered_map<uint64, uint8> _instanceEntries;
+
+    journey::Rules _rules;
+    std::unordered_map<uint32, journey::ItemEra> _enchantmentEras;       // gem and craft enchantments
+    std::unordered_map<uint32, std::vector<uint32>> _socketBonusItems;   // socket bonus -> items carrying it
 };
 
 #define sJourneyContent JourneyContent::Instance()

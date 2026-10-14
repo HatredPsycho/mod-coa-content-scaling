@@ -197,6 +197,45 @@ namespace journey
         }
     }
 
+    bool IsEnchantEffect(uint32_t effect)
+    {
+        return effect == 53 || effect == 54 || effect == 92;
+    }
+
+    ItemEra CraftEra(int skillRank)
+    {
+        if (skillRank > 375)
+            return ITEM_WOTLK;
+        return skillRank > 300 ? ITEM_TBC : ITEM_KEEP;
+    }
+
+    ItemEra GemEra(uint32_t itemEntry)
+    {
+        return itemEntry < 36000 ? ITEM_TBC : ITEM_WOTLK;
+    }
+
+    int Rules::TrainerLevel(uint32_t spellId, int level) const
+    {
+        if (level <= 0)
+            return level;
+        constexpr uint32_t ExpertRiding = 34090;
+        return spellId == ExpertRiding ? Outland(level) : Compress(level, ERA_CLASSIC);
+    }
+
+    int Rules::EnchantmentLevel(int requiredLevel, bool northrend, int top) const
+    {
+        if (requiredLevel < 58)
+            return requiredLevel;
+        int const compressed = Compress(requiredLevel, northrend ? ERA_NORTHREND : ERA_OUTLAND);
+        int const now = std::clamp(compressed, 1, std::max(top, 1));
+        return std::min(now, requiredLevel);
+    }
+
+    int Rules::BattlegroundMinLevel(int minLevel) const
+    {
+        return std::min(minLevel, _shape.endgame);
+    }
+
     double SpellLevelFactor(double hitAtOriginalLevel, double hitAtNewLevel)
     {
         if (hitAtOriginalLevel <= 0.0 || hitAtNewLevel <= 0.0 || hitAtNewLevel >= hitAtOriginalLevel)

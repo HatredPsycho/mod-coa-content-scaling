@@ -84,6 +84,22 @@ void CoAContentScaling::LoadConfig()
         std::clamp(sConfigMgr->GetOption<int32>(CoAContentScalingConfigKeys::JourneyWindowBelow, 2), 0, 10);
     _journeySettings.windowAbove =
         std::clamp(sConfigMgr->GetOption<int32>(CoAContentScalingConfigKeys::JourneyWindowAbove, 2), 0, 10);
+    _journeySettings.trainers = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyTrainersEnable, true);
+    _journeySettings.battlegrounds =
+        sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyBattlegroundsEnable, true);
+    _journeySettings.enchantments =
+        sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyEnchantmentsEnable, true);
+    {
+        float const general = sConfigMgr->GetOption<float>(CoAContentScalingConfigKeys::JourneyQuestXpRate, 1.0f);
+        static constexpr std::array<char const*, 4> Parts = { "OldWorld", "Outland", "Northrend", "Endgame" };
+        for (size_t part = 0; part < Parts.size(); ++part)
+        {
+            float const own = sConfigMgr->GetOption<float>(
+                std::string(CoAContentScalingConfigKeys::JourneyQuestXpRate) + "." + Parts[part], -1.0f, false);
+            float const rate = own >= 0.0f ? own : general;
+            _journeySettings.questXpRates[part] = std::isfinite(rate) ? std::clamp(rate, 0.0f, 10.0f) : 1.0f;
+        }
+    }
     _wotlkEnabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::WotlkEnable, false);
 
     std::string const soloMode = sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::SoloAssistMode, "0");
@@ -211,9 +227,22 @@ void CoAContentScaling::LoadContentEras()
     // equipment reward asks for.
     JourneyBuildReport const report = sJourneyContent->Build(_layout.journeyRules, _journeySettings, _layout.maxLevel,
         [this](uint32 mapId, uint8 difficulty) { return IsAuthenticMap(mapId, difficulty); });
-    LOG_INFO("server.loading", "CoAContentScaling: the journey moved {} of {} creature templates and {} quests, "
-             "and {} Dungeon Finder entries", report.creaturesMoved, report.creatureTemplates, report.questsMoved,
-             report.dungeonFinderEntries);
+    LOG_INFO("server.loading", "CoAContentScaling: the journey moved {} of {} creature templates, {} quests, "
+             "{} Dungeon Finder entries, {} trainer spells and {} battlegrounds", report.creaturesMoved,
+             report.creatureTemplates, report.questsMoved, report.dungeonFinderEntries, report.trainerSpells,
+             report.battlegrounds);
+}
+
+void CoAContentScaling::ScaleEnchantments()
+{
+    if (!_enabled || !_layout.journey)
+        return;
+
+    JourneyEnchantmentReport const report = sJourneyContent->BuildEnchantments();
+    LOG_INFO("server.loading", "CoAContentScaling: the top rewards of Outland keep {:.0f}% of their statistics, "
+             "those of Northrend {:.0f}%; {} enchantments and gems cut, {} ask for a level of the journey",
+             report.outlandEndgameRatio * 100.0f, report.northrendEndgameRatio * 100.0f, report.enchantments,
+             report.enchantmentLevels);
 }
 
 ContentEra CoAContentScaling::EraOfJourney(journey::Era era)
@@ -913,6 +942,7 @@ namespace
         {
             sCoAContentScaling->LoadContentEras();
             sCoAContentScaling->ScaleItems();
+            sCoAContentScaling->ScaleEnchantments();
         }
 
         void OnLoadCustomDatabaseTable() override
@@ -1011,7 +1041,8 @@ namespace
                 LocalLevelScaling::ItemEnchantmentAmountOwner.store(
                     [](uint32 hostItemEntry, uint32 enchantmentType, uint32 statType, uint32 amount) -> uint32
                 {
-                    if (!sCoAContentScaling->IsEnabled() ||
+                    // On the journey the enchantments themselves were cut at startup, by their own game.
+                    if (!sCoAContentScaling->IsEnabled() || sCoAContentScaling->GetLayout().journey ||
                         !sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::ScaleEnchantments, true))
                         return amount;
 
@@ -1043,7 +1074,7 @@ namespace
                 // into, instead of staying out of reach of everyone on a realm that ends below it.
                 LocalLevelScaling::EnchantmentRequiredLevelOwner.store([](uint32 requiredLevel) -> uint32
                 {
-                    if (!sCoAContentScaling->IsEnabled())
+                    if (!sCoAContentScaling->IsEnabled() || sCoAContentScaling->GetLayout().journey)
                         return requiredLevel;
 
                     ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
@@ -1098,6 +1129,9 @@ namespace
 
                     if (quest->IsDFQuest())
                         return sWorld->getRate(RATE_XP_QUEST_DF);
+
+                    if (sCoAContentScaling->GetLayout().journey)
+                        return sJourneyContent->GetQuestXpRate(quest->GetQuestId(), defaultRate);
 
                     ContentEra const era = sContentEraResolver->ResolveEraForQuest(
                         quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(quest->GetQuestLevel()));

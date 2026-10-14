@@ -148,6 +148,43 @@ CoAContentScaling.Journey.Window.Below = 2
 CoAContentScaling.Journey.Window.Above = 2
 
 #
+# CoAContentScaling.Journey.Trainers.Enable
+#     Description: Riding and the professions are taught at the levels of the journey; expert riding
+#                  (flying) opens at the doors of Outland. The class trainers keep CoA's own levels.
+#     Default:     1
+#
+CoAContentScaling.Journey.Trainers.Enable = 1
+
+#
+# CoAContentScaling.Journey.Battlegrounds.Enable
+#     Description: The Eye of the Storm, the Strand of the Ancients and the Isle of Conquest open at the
+#                  endgame level, and their first bracket takes a character of it. The random battleground
+#                  still draws them only above their authored level.
+#     Default:     1
+#
+CoAContentScaling.Journey.Battlegrounds.Enable = 1
+
+#
+# CoAContentScaling.Journey.Enchantments.Enable
+#     Description: Gems and the enchantments of Outland's and Northrend's professions keep what the top
+#                  rewards of their game kept of their statistics; a socket bonus keeps what its item kept.
+#                  The level they ask for follows the end of their game's road. On the journey this
+#                  replaces CoAContentScaling.ScaleEnchantments.
+#     Default:     1
+#
+CoAContentScaling.Journey.Enchantments.Enable = 1
+
+#
+# CoAContentScaling.Journey.Quests.XpRate
+# CoAContentScaling.Journey.Quests.XpRate.<Part>
+#     Description: The experience of quests on the journey, on top of the core's quest rate. Part:
+#                  OldWorld, Outland, Northrend, Endgame - for one part, wins over the general one.
+#                  Range 0-10.
+#     Default:     1.0
+#
+CoAContentScaling.Journey.Quests.XpRate = 1.0
+
+#
 # CoAContentScaling.AuthenticMaps
 #     Description: Comma separated map ids played at their authored levels on every difficulty.
 #                  Creatures keep their level, health and damage, entry keeps its authored level

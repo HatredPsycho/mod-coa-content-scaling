@@ -39,6 +39,7 @@ public:
     static journey::Shape LoadJourneyShape();
     void FinalizeAndInitialize();
     void LoadContentEras();
+    void ScaleEnchantments();
     [[nodiscard]] static ContentEra EraOfJourney(journey::Era era);
     void InitializeLayout();
 

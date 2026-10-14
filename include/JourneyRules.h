@@ -102,6 +102,14 @@ namespace journey
     /// shrink with what a blow is worth at its new level against its original one. Never raised.
     double SpellLevelFactor(double hitAtOriginalLevel, double hitAtNewLevel);
 
+    /// An effect that puts an enchantment on an item (its MiscValue): enchant item, temporary, held item.
+    bool IsEnchantEffect(uint32_t effect);
+
+    /// The game an enchantment taught by a profession belongs to, by the skill rank it asks for.
+    ItemEra CraftEra(int skillRank);
+    /// The game a gem belongs to, by its item entry: Northrend's gems were added from 36000 on.
+    ItemEra GemEra(uint32_t itemEntry);
+
     /// Money goes with the square of the level, roughly; it shrinks with it.
     uint32_t ScaleMoney(uint32_t money, int from, int to);
 
@@ -145,6 +153,15 @@ namespace journey
         /// What an item becomes: its required level follows the journey, its item level follows the required
         /// level - so that the stats of a level-37 item are those of a level-37 item, whichever game it came from.
         [[nodiscard]] ItemPlan PlanItem(int quality, int requiredLevel, int itemLevel) const;
+
+        /// The level a trainer teaches riding or a profession step at. Expert riding - flying - opens once at the
+        /// doors of Outland.
+        [[nodiscard]] int TrainerLevel(uint32_t spellId, int level) const;
+        /// The level an enchantment of Outland or Northrend asks for: the end of its game's road. Below 58 the old
+        /// world's enchantments stay as their classes learn them.
+        [[nodiscard]] int EnchantmentLevel(int requiredLevel, bool northrend, int top) const;
+        /// The battlegrounds that open above the endgame take a character of the endgame into their first bracket.
+        [[nodiscard]] int BattlegroundMinLevel(int minLevel) const;
 
     private:
         Shape _shape;
