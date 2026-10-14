@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "name": "Journey: CoA's creature multipliers lift the open world and authentic maps, not the instances content scaling sizes",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1, Progression.Mode=Journey and the default AuthenticMaps (conf/verify-all-scaling.json); the scenario turns CoA creature scaling on at its default multipliers. Content scaling sets health and damage of the creatures of the instances it sizes, so CoA's multipliers stay out there: a scripted melee hit of 1000 from Oggleflint (11517) in Ragefire Chasm (389) on a level 10 character takes only content scaling's own adjustment, 285, where CoA's dungeon multiplier made it 427. The open world keeps them: a Westfall Coyote (834) hits a level 7 character for 2000. An authentic map keeps them too: Dire Maul (429) is played at its authored levels, so a hit there on a level 58 character is 1500 and its creature 14323 has the 2.5x health of the other realms. The character's level follows each creature's, because other damage scripts react to a large level gap.",
+  "creature_scaling": true,
+  "timeout_ms": 120000,
+  "location": { "map": 0, "x": -9742.64, "y": 971.8, "z": 30.14, "o": 0.0 },
+  "players": [ { "id": "p", "race": 1, "class": 1, "level": 60 } ],
+  "steps": [
+    { "action": "wait", "ms": 1000 },
+    { "action": "set_phase", "actor": "p", "value": 1 },
+    { "action": "set_level", "actor": "p", "value": 7 },
+    { "action": "teleport", "actor": "p", "map": 0, "x": -9742.64, "y": 971.8, "z": 30.14, "o": 0.0 },
+    { "action": "wait", "ms": 2000 },
+    { "action": "assert", "label": "Open world: a Coyote's hit is doubled", "actor": "p", "metric": "script_melee_damage_taken", "entry": 834, "equals": 2000, "within_ms": 5000 },
+    { "action": "set_level", "actor": "p", "value": 10 },
+    { "action": "teleport", "actor": "p", "map": 389, "x": -147.548, "y": 38.7127, "z": -38.8039 },
+    { "action": "wait", "ms": 1000 },
+    { "action": "assert", "label": "Ragefire Chasm, sized by content scaling: CoA leaves the hit as it is", "actor": "p", "metric": "script_melee_damage_taken", "entry": 11517, "equals": 285, "within_ms": 5000 },
+    { "action": "set_level", "actor": "p", "value": 58 },
+    { "action": "teleport", "actor": "p", "map": 429, "x": 550.38, "y": 533.725, "z": -24.3185 },
+    { "action": "wait", "ms": 1000 },
+    { "action": "assert", "label": "Dire Maul, authentic: the dungeon multiplier applies", "actor": "p", "metric": "script_melee_damage_taken", "entry": 14323, "equals": 1500, "within_ms": 5000 },
+    { "action": "assert", "label": "Dire Maul, authentic: 2.5x health as on the other realms", "actor": "p", "metric": "nearby_creature_max_health", "entry": 14323, "equals": 153973, "within_ms": 5000 }
+  ]
+}
