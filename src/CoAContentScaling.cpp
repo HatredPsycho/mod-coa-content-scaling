@@ -204,10 +204,22 @@ void CoAContentScaling::FinalizeAndInitialize()
     _layoutInitialized = true;
     InitializeLayout();
 
-    // The realm's own creature multipliers were tuned for the authored world; on top of a moved one they double up.
+    // The realm's own creature multipliers lift the open world, which content scaling leaves at the base statistics of
+    // the moved levels; in instances content scaling sets the budget, and CoA's instance multipliers would double it.
     if (sConfigMgr->GetOption<bool>("CoA.CreatureScaling.Enable", false, false))
-        LOG_WARN("server.loading", "CoAContentScaling: CoA.CreatureScaling.Enable is on beside content scaling; its "
-                 "health and damage multipliers apply on top of the moved creatures.");
+    {
+        bool instanceMultipliers =
+            !sConfigMgr->GetOption<std::string>("CoA.CreatureScaling.MapHealth", "", false).empty() ||
+            !sConfigMgr->GetOption<std::string>("CoA.CreatureScaling.MapDamage", "", false).empty();
+        for (char const* key : { "CoA.CreatureScaling.Dungeon.Health", "CoA.CreatureScaling.Dungeon.Damage",
+                                 "CoA.CreatureScaling.Raid.Health", "CoA.CreatureScaling.Raid.Damage" })
+            if (std::fabs(sConfigMgr->GetOption<float>(key, 1.0f, false) - 1.0f) > 0.001f)
+                instanceMultipliers = true;
+        if (instanceMultipliers)
+            LOG_WARN("server.loading", "CoAContentScaling: CoA.CreatureScaling applies dungeon, raid or map "
+                     "multipliers; content scaling already sets the instance budget, so set them to 1.0 and "
+                     "MapHealth/MapDamage empty.");
+    }
 
     // 2. Load calibrated boss flex profiles
     sInstanceScalingMgr->LoadCalibratedBossFlex();
