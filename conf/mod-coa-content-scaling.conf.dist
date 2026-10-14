@@ -19,8 +19,10 @@ CoAContentScaling.Enable = 0
 #
 # CoAContentScaling.Progression.Mode
 #     Description: Progression layout boundary mode.
-#     Values:      Auto   - Calculates boundaries based on the enabled expansions and MaxPlayerLevel
-#                  Custom - Uses Progression.ClassicEnd and Progression.TbcEnd
+#     Values:      Auto    - Calculates boundaries based on the enabled expansions and MaxPlayerLevel
+#                  Custom  - Uses Progression.ClassicEnd and Progression.TbcEnd
+#                  Journey - Lays each expansion over its own, overlapping range (CoAContentScaling.Journey.*),
+#                            with the heroics and raids of Outland and Northrend at the endgame level
 #     Default:     Auto
 #
 CoAContentScaling.Progression.Mode = Auto
@@ -71,6 +73,54 @@ CoAContentScaling.TBC.Enable = 0
 #                  1 - Enabled
 #
 CoAContentScaling.WotLK.Enable = 0
+
+#
+# CoAContentScaling.Journey.Classic.Range
+# CoAContentScaling.Journey.Outland.Range
+# CoAContentScaling.Journey.Northrend.Range
+#     Description: With Progression.Mode = Journey, the levels at which the zones of a part open, from its
+#                  first zone to its last, as "from-to". The zones keep their order; the creatures, quests
+#                  and items of a part spread over its range the way they spread over the original one.
+#                  The old world was 1-55, Outland 58-67, Northrend 68-77. Ranges may overlap.
+#     Default:     1-35, 30-43, 40-55
+#
+CoAContentScaling.Journey.Classic.Range = 1-35
+CoAContentScaling.Journey.Outland.Range = 30-43
+CoAContentScaling.Journey.Northrend.Range = 40-55
+
+#
+# CoAContentScaling.Journey.Endgame.Level
+#     Description: The level of the raids and heroic dungeons of Outland and Northrend (50-60).
+#     Default:     60
+#
+CoAContentScaling.Journey.Endgame.Level = 60
+
+#
+# CoAContentScaling.Journey.Endgame.BossLevels
+#     Description: How many levels above the endgame level their bosses stand (0-3).
+#     Default:     3
+#
+CoAContentScaling.Journey.Endgame.BossLevels = 3
+
+#
+# CoAContentScaling.Journey.Endgame.Outland.ItemLevels
+# CoAContentScaling.Journey.Endgame.Northrend.ItemLevels
+#     Description: The item levels of the rewards of the raids, heroics and arenas of Outland and of
+#                  Northrend at the end of the journey, as "lowest-highest". The raids of the old world stay
+#                  as they are (66 to 92), so the endgame is a ladder.
+#     Default:     75-110, 95-140
+#
+CoAContentScaling.Journey.Endgame.Outland.ItemLevels = 75-110
+CoAContentScaling.Journey.Endgame.Northrend.ItemLevels = 95-140
+
+#
+# CoAContentScaling.Journey.Zone.<zone id>
+# CoAContentScaling.Journey.Instance.<map id>
+#     Description: The entry level of a single zone or instance, set by hand. Zone entries are kept below
+#                  the endgame level - 5.
+#     Example:     CoAContentScaling.Journey.Zone.3483 = 32    (Hellfire Peninsula from 32)
+#                  CoAContentScaling.Journey.Instance.543 = 31 (Hellfire Ramparts from 31)
+#     Default:     none
 
 #
 # CoAContentScaling.AuthenticMaps

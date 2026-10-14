@@ -8,6 +8,7 @@
 
 #include "ContentEra.h"
 #include "Define.h"
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -16,14 +17,18 @@ class ContentEraResolver
 public:
     static ContentEraResolver* Instance();
 
-    // Reads the expansion of every map and the map of every area from the client data. Lifecycle
+    // Reads the expansion of every map and the map and zone of every area from the client data. Lifecycle
     // control: registration is allowed only before finalization.
     void LoadClientData();
+    // The era of every zone the journey tables name (JourneyData.h).
+    void LoadJourneyZones();
     void Finalize();
     [[nodiscard]] bool IsFinalized() const { return _finalized; }
 
     void RegisterMapExpansion(uint32 mapId, uint8 expansion);
     void RegisterAreaMap(uint32 areaId, uint32 mapId);
+    void RegisterAreaZone(uint32 areaId, uint32 zoneId);
+    void RegisterZoneEra(uint32 zoneId, ContentEra era);
     // Areas that shipped with an expansion but were written for Classic levels: the Blood Elf and
     // Draenei starting zones on the Outland map.
     void RegisterClassicArea(uint32 areaId);
@@ -39,7 +44,7 @@ public:
     // 1. Explicit entry override
     // 2. Explicit area override
     // 3. Explicit instance/map profile
-    // 4. Map expansion from the client data
+    // 4. The zone table, then the map expansion from the client data
     // 5. Authored expansion metadata
     // 6. Zone/sort metadata
     // 7. Authored level heuristic (last resort)
@@ -64,6 +69,8 @@ public:
                                                uint32 requiredLevel = 0, uint8 authoredExpansion = 0) const;
 
     [[nodiscard]] bool IsClassicArea(uint32 areaId) const { return _classicAreas.count(areaId) > 0; }
+    [[nodiscard]] std::optional<ContentEra> GetZoneEra(uint32 areaId) const;
+    [[nodiscard]] size_t GetZoneEraCount() const { return _zoneEras.size(); }
     [[nodiscard]] size_t GetMapExpansionCount() const { return _mapExpansions.size(); }
     [[nodiscard]] size_t GetAreaMapCount() const { return _areaMaps.size(); }
     [[nodiscard]] size_t GetClassicAreaCount() const { return _classicAreas.size(); }
@@ -77,6 +84,8 @@ private:
 
     std::unordered_map<uint32, ContentEra> _mapExpansions;
     std::unordered_map<uint32, uint32> _areaMaps;
+    std::unordered_map<uint32, uint32> _areaZones;
+    std::unordered_map<uint32, ContentEra> _zoneEras;
     std::unordered_set<uint32> _classicAreas;
 
     std::unordered_map<uint32, ContentEra> _mapOverrides;

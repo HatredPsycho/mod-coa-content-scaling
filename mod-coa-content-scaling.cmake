@@ -9,6 +9,7 @@ set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_INCLUDES
 
 set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_SOURCES
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/ProgressionLayout.cpp"
+    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/JourneyRules.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/InstanceProfile.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/ContentEraResolver.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/ItemBudgetScaler.cpp"
@@ -23,6 +24,7 @@ set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_SOURCES
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/encounters/wotlk/ValithriaAdapter.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/encounters/wotlk/LichKingAdapter.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/ProgressionLayoutTest.cpp"
+    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/JourneyRulesTest.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/LootCreditTest.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/EncounterAdaptationTest.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/LiftedItemScalingTest.cpp")

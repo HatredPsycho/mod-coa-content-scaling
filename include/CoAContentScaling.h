@@ -35,6 +35,7 @@ public:
     void LoadConfig();
     // The settings that only tune numbers, read again on .reload config.
     void LoadTuning();
+    static journey::Shape LoadJourneyShape();
     void FinalizeAndInitialize();
     void LoadContentEras();
     void InitializeLayout();
@@ -142,6 +143,7 @@ private:
     uint8 _customTbcEnd{0};
 
     ProgressionLayout _layout;
+    journey::Shape _journeyShape;
     std::unordered_set<uint32> _authenticMaps;
     std::unordered_set<uint32> _authenticHeroicMaps;
     uint8 _authenticHeroicMinLevel{60};

@@ -44,6 +44,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
+#include <map>
 
 void AddCoAContentScalingCommands();
 
@@ -73,6 +75,7 @@ void CoAContentScaling::LoadConfig()
     _customTbcEnd = static_cast<uint8>(sConfigMgr->GetOption<uint32>(CoAContentScalingConfigKeys::ProgressionTbcEnd, 0));
 
     _tbcEnabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::TbcEnable, false);
+    _journeyShape = LoadJourneyShape();
     _wotlkEnabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::WotlkEnable, false);
 
     std::string const soloMode = sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::SoloAssistMode, "0");
@@ -86,6 +89,43 @@ void CoAContentScaling::LoadConfig()
         sConfigMgr->GetOption<uint32>(CoAContentScalingConfigKeys::AuthenticHeroicMinLevel, 60), 255));
 
     LoadTuning();
+}
+
+namespace
+{
+    std::map<uint32, int> ReadJourneyEntries(std::string const& prefix)
+    {
+        std::map<uint32, int> entries;
+        for (std::string const& key : sConfigMgr->GetKeysByString(prefix))
+        {
+            uint32 const id = static_cast<uint32>(std::strtoul(key.c_str() + prefix.size(), nullptr, 10));
+            int32 const level = sConfigMgr->GetOption<int32>(key, 0);
+            if (id && level > 0)
+                entries[id] = level;
+        }
+        return entries;
+    }
+}
+
+journey::Shape CoAContentScaling::LoadJourneyShape()
+{
+    using namespace CoAContentScalingConfigKeys;
+    auto range = [](char const* key, journey::Range fallback)
+    {
+        return CoAContentScalingConfig::ParseLevelRange(key, sConfigMgr->GetOption<std::string>(key, "", false), fallback);
+    };
+
+    journey::Shape shape;
+    shape.classic = range(JourneyClassicRange, shape.classic);
+    shape.outlandRange = range(JourneyOutlandRange, shape.outlandRange);
+    shape.northrendRange = range(JourneyNorthrendRange, shape.northrendRange);
+    shape.endgame = sConfigMgr->GetOption<int32>(JourneyEndgameLevel, shape.endgame);
+    shape.bossLevels = sConfigMgr->GetOption<int32>(JourneyEndgameBossLevels, shape.bossLevels);
+    shape.outlandItems = range(JourneyOutlandItemLevels, shape.outlandItems);
+    shape.northrendItems = range(JourneyNorthrendItemLevels, shape.northrendItems);
+    shape.zoneEntries = ReadJourneyEntries(JourneyZonePrefix);
+    shape.instanceEntries = ReadJourneyEntries(JourneyInstancePrefix);
+    return shape.Normalized();
 }
 
 bool CoAContentScaling::IsAuthenticMap(uint32 mapId, uint8 difficulty) const
@@ -393,7 +433,15 @@ void CoAContentScaling::InitializeLayout()
     bool const tbcActive = _tbcEnabled;
     bool const wotlkActive = _wotlkEnabled;
 
-    if (_progressionMode == "Custom")
+    if (_progressionMode == "Journey")
+    {
+        _layout = ProgressionLayout::CreateJourney(maxPlayerLevel, tbcActive, wotlkActive, _journeyShape);
+        if (maxPlayerLevel > _layout.journeyRules.GetShape().endgame)
+            LOG_WARN("server.loading", "CoAContentScaling: MaxPlayerLevel {} is above the journey's endgame level {}; "
+                     "characters past it meet no content of their level.", maxPlayerLevel,
+                     _layout.journeyRules.GetShape().endgame);
+    }
+    else if (_progressionMode == "Custom")
     {
         _layout = ProgressionLayout::Create(
             maxPlayerLevel, tbcActive, wotlkActive, _customClassicEnd, _customTbcEnd);

@@ -34,11 +34,12 @@ enum class EraResolutionSource : uint8
     ExplicitOverride       = 0,
     ExplicitAreaOverride   = 1,
     InstanceProfile        = 2,
-    MapExpansion           = 3,
-    AuthoredExpansion      = 4,
-    ZoneSortMetadata       = 5,
-    AuthoredLevelHeuristic = 6,
-    SafeFallback           = 7
+    ZoneTable              = 3,
+    MapExpansion           = 4,
+    AuthoredExpansion      = 5,
+    ZoneSortMetadata       = 6,
+    AuthoredLevelHeuristic = 7,
+    SafeFallback           = 8
 };
 
 constexpr std::string_view EraResolutionSourceToString(EraResolutionSource source)
@@ -48,6 +49,7 @@ constexpr std::string_view EraResolutionSourceToString(EraResolutionSource sourc
         case EraResolutionSource::ExplicitOverride:       return "ExplicitOverride";
         case EraResolutionSource::ExplicitAreaOverride:   return "ExplicitAreaOverride";
         case EraResolutionSource::InstanceProfile:        return "InstanceProfile";
+        case EraResolutionSource::ZoneTable:              return "ZoneTable";
         case EraResolutionSource::MapExpansion:           return "MapExpansion";
         case EraResolutionSource::AuthoredExpansion:      return "AuthoredExpansion";
         case EraResolutionSource::ZoneSortMetadata:       return "ZoneSortMetadata";

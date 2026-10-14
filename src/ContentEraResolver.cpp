@@ -6,6 +6,7 @@
 #include "ContentEraResolver.h"
 #include "DBCStores.h"
 #include "InstanceProfile.h"
+#include "JourneyData.h"
 #include "Log.h"
 #include <algorithm>
 #include <array>
@@ -14,9 +15,9 @@ namespace
 {
     constexpr uint32 OUTLAND_MAP = 530;
 
-    // Zones on the Outland map written for levels 1 to 20: Eversong Woods, Ghostlands, Silvermoon
-    // City, Azuremyst Isle, Bloodmyst Isle and The Exodar.
-    constexpr std::array<uint32, 6> ClassicZonesOnOutland = { 3430, 3433, 3487, 3524, 3525, 3557 };
+    // The capitals of the Blood Elves and the Draenei are not in the journey tables, but belong to the
+    // starting zones around them.
+    constexpr std::array<uint32, 2> ClassicCapitalsOnOutland = { 3487, 3557 };
 
     ContentEra EraOfExpansion(uint8 expansion)
     {
@@ -44,21 +45,35 @@ void ContentEraResolver::LoadClientData()
         if (map)
             RegisterMapExpansion(map->MapID, static_cast<uint8>(map->Expansion()));
 
+    LoadJourneyZones();
+
     for (AreaTableEntry const* area : sAreaTableStore)
     {
         if (!area)
             continue;
 
-        RegisterAreaMap(area->ID, area->mapid);
-
         uint32 const zone = area->zone ? area->zone : area->ID;
-        if (area->mapid == OUTLAND_MAP &&
-            std::find(ClassicZonesOnOutland.begin(), ClassicZonesOnOutland.end(), zone) != ClassicZonesOnOutland.end())
+        RegisterAreaMap(area->ID, area->mapid);
+        RegisterAreaZone(area->ID, zone);
+
+        bool const classicCapital = std::find(ClassicCapitalsOnOutland.begin(), ClassicCapitalsOnOutland.end(), zone) !=
+            ClassicCapitalsOnOutland.end();
+        if (area->mapid == OUTLAND_MAP && (classicCapital || GetZoneEra(zone) == ContentEra::Classic))
             RegisterClassicArea(area->ID);
     }
 
-    LOG_INFO("server.loading", "ContentEraResolver: {} map expansions, {} area maps and {} Classic areas on Outland",
-             uint32(_mapExpansions.size()), uint32(_areaMaps.size()), uint32(_classicAreas.size()));
+    LOG_INFO("server.loading", "ContentEraResolver: {} map expansions, {} area maps, {} zone eras and {} Classic areas "
+             "on Outland", uint32(_mapExpansions.size()), uint32(_areaMaps.size()), uint32(_zoneEras.size()),
+             uint32(_classicAreas.size()));
+}
+
+void ContentEraResolver::LoadJourneyZones()
+{
+    if (_finalized)
+        return;
+
+    for (journey::ZoneData const& zone : journey::Zones)
+        RegisterZoneEra(zone.zone, EraOfExpansion(zone.part));
 }
 
 void ContentEraResolver::Finalize()
@@ -74,6 +89,25 @@ void ContentEraResolver::RegisterMapExpansion(uint32 mapId, uint8 expansion)
 void ContentEraResolver::RegisterAreaMap(uint32 areaId, uint32 mapId)
 {
     _areaMaps[areaId] = mapId;
+}
+
+void ContentEraResolver::RegisterAreaZone(uint32 areaId, uint32 zoneId)
+{
+    _areaZones[areaId] = zoneId;
+}
+
+void ContentEraResolver::RegisterZoneEra(uint32 zoneId, ContentEra era)
+{
+    _zoneEras[zoneId] = era;
+}
+
+std::optional<ContentEra> ContentEraResolver::GetZoneEra(uint32 areaId) const
+{
+    auto const zone = _areaZones.find(areaId);
+    auto const era = _zoneEras.find(zone != _areaZones.end() ? zone->second : areaId);
+    if (era == _zoneEras.end())
+        return std::nullopt;
+    return era->second;
 }
 
 void ContentEraResolver::RegisterClassicArea(uint32 areaId)
@@ -154,7 +188,11 @@ EraResolutionResult ContentEraResolver::ResolveEraDetailsForArea(uint32 areaId, 
     if ((mapId == OUTLAND_MAP || mapId == MAP_UNSPECIFIED) && IsClassicArea(areaId))
         return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
 
-    // 2. Defer to map resolution, through the area's own map when none is given
+    // 2. The zone table
+    if (auto const zoneEra = GetZoneEra(areaId))
+        return EraResolutionResult{*zoneEra, EraResolutionSource::ZoneTable, 1.0f};
+
+    // 3. Defer to map resolution, through the area's own map when none is given
     if (mapId == MAP_UNSPECIFIED)
     {
         auto const areaMap = _areaMaps.find(areaId);
@@ -165,7 +203,7 @@ EraResolutionResult ContentEraResolver::ResolveEraDetailsForArea(uint32 areaId, 
     if (mapId != MAP_UNSPECIFIED)
         return ResolveEraDetailsForMap(mapId, authoredExpansion);
 
-    // 3. Authored expansion metadata
+    // 4. Authored expansion metadata
     if (authoredExpansion == 2)
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredExpansion, 0.95f};
     if (authoredExpansion == 1)
@@ -260,6 +298,9 @@ EraResolutionResult ContentEraResolver::ResolveEraDetailsForQuest(uint32 questId
 
         if (IsClassicArea(uint32(zoneOrSort)))
             return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
+
+        if (auto const zoneEra = GetZoneEra(uint32(zoneOrSort)))
+            return EraResolutionResult{*zoneEra, EraResolutionSource::ZoneTable, 1.0f};
     }
 
     // Priority 3: Authored expansion metadata
@@ -373,6 +414,8 @@ void ContentEraResolver::Clear()
     _finalized = false;
     _mapExpansions.clear();
     _areaMaps.clear();
+    _areaZones.clear();
+    _zoneEras.clear();
     _classicAreas.clear();
     _mapOverrides.clear();
     _areaOverrides.clear();

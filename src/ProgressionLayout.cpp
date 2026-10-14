@@ -79,12 +79,83 @@ ProgressionLayout ProgressionLayout::Create(uint8 maxLevel, bool tbcEnabled, boo
     return layout;
 }
 
+namespace
+{
+    LevelRange ToLevelRange(journey::Range const& range)
+    {
+        return LevelRange(static_cast<uint8>(std::clamp(range.from, 1, 255)),
+                          static_cast<uint8>(std::clamp(range.to, 1, 255)));
+    }
+
+    bool ValidateJourneyRange(char const* name, journey::Range const& range, int endgame, std::string& outError)
+    {
+        if (range.from < 1 || range.to < range.from)
+        {
+            outError = std::string(name) + " range " + std::to_string(range.from) + "-" + std::to_string(range.to) +
+                " is invalid";
+            return false;
+        }
+        if (range.to > endgame)
+        {
+            outError = std::string(name) + " range ends above the endgame level " + std::to_string(endgame);
+            return false;
+        }
+        return true;
+    }
+}
+
+ProgressionLayout ProgressionLayout::CreateJourney(uint8 maxLevel, bool tbcEnabled, bool wotlkEnabled,
+                                                   journey::Shape const& shape)
+{
+    journey::Shape laid = shape;
+    laid.outland = tbcEnabled;
+    laid.northrend = wotlkEnabled;
+
+    ProgressionLayout layout;
+    layout.maxLevel = maxLevel;
+    layout.tbcEnabled = tbcEnabled;
+    layout.wotlkEnabled = wotlkEnabled;
+    layout.journey = true;
+    layout.journeyRules = journey::Rules(laid);
+
+    journey::Shape const& normalized = layout.journeyRules.GetShape();
+    layout.classic = ToLevelRange(normalized.classic);
+    layout.tbc = tbcEnabled ? std::optional<LevelRange>(ToLevelRange(normalized.outlandRange)) : std::nullopt;
+    layout.wotlk = wotlkEnabled ? std::optional<LevelRange>(ToLevelRange(normalized.northrendRange)) : std::nullopt;
+    return layout;
+}
+
 bool ProgressionLayout::Validate(std::string& outError) const
 {
     if (maxLevel < 60 || maxLevel > 80)
     {
         outError = "MaxPlayerLevel " + std::to_string(maxLevel) + " is outside supported range [60, 80]";
         return false;
+    }
+
+    if (journey)
+    {
+        journey::Shape const& shape = journeyRules.GetShape();
+        if (shape.classic.from != 1)
+        {
+            outError = "Classic range is invalid or does not start at 1";
+            return false;
+        }
+        if (shape.endgame > maxLevel)
+        {
+            outError = "Endgame level " + std::to_string(shape.endgame) + " is above MaxPlayerLevel";
+            return false;
+        }
+        if (!ValidateJourneyRange("Classic", shape.classic, shape.endgame, outError) ||
+            (tbcEnabled && !ValidateJourneyRange("Outland", shape.outlandRange, shape.endgame, outError)) ||
+            (wotlkEnabled && !ValidateJourneyRange("Northrend", shape.northrendRange, shape.endgame, outError)))
+            return false;
+        if (tbcEnabled && wotlkEnabled && shape.northrendRange.from < shape.outlandRange.from)
+        {
+            outError = "Northrend opens below Outland";
+            return false;
+        }
+        return true;
     }
 
     if (!classic.IsValid() || classic.minLevel != 1)
@@ -187,7 +258,7 @@ bool ProgressionLayout::IsEraEnabled(ContentEra era) const
 // where an expansion's own content begins, this says where a character of that level stands.
 bool ProgressionLayout::IsStockIdentity() const
 {
-    return maxLevel == 80 && tbcEnabled && wotlkEnabled &&
+    return !journey && maxLevel == 80 && tbcEnabled && wotlkEnabled &&
         classic.minLevel == 1 && classic.maxLevel == 60 &&
         tbc.has_value() && tbc->minLevel == 60 && tbc->maxLevel == 70 &&
         wotlk.has_value() && wotlk->minLevel == 70 && wotlk->maxLevel == 80;
@@ -227,6 +298,19 @@ ContentEra ProgressionLayout::ResolveContentEra(ContentEra taggedEra, uint8 auth
 uint8 ProgressionLayout::MapAuthoredToEffective(ContentEra era, uint8 authoredLevel,
                                                uint8 sourceMin, uint8 sourceMax) const
 {
+    if (journey)
+    {
+        int mapped = authoredLevel;
+        switch (era)
+        {
+            case ContentEra::Classic: mapped = journeyRules.Compress(authoredLevel, journey::ERA_CLASSIC); break;
+            case ContentEra::TBC:     mapped = journeyRules.Outland(authoredLevel); break;
+            case ContentEra::WotLK:   mapped = journeyRules.Northrend(authoredLevel); break;
+            default:                  break;
+        }
+        return static_cast<uint8>(std::clamp<int>(mapped, authoredLevel ? 1 : 0, maxLevel));
+    }
+
     LevelRange const targetRange = GetEraRange(era);
     if (!targetRange.IsValid())
         return std::min(authoredLevel, maxLevel);
@@ -266,6 +350,8 @@ std::string ProgressionLayout::ToString() const
 {
     std::ostringstream ss;
     ss << "MaxPlayerLevel: " << uint32(maxLevel) << "\n";
+    if (journey)
+        ss << "Preset: Journey (endgame " << journeyRules.GetShape().endgame << ")\n";
     ss << "Active Packs: Classic";
     if (tbcEnabled)
         ss << ", TBC";

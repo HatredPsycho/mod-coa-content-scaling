@@ -12,7 +12,8 @@ Unlike destructive SQL migration patches that rewrite creature/item/quest databa
 
 ```text
 mod-coa-content-scaling (Core Engine)
-    ├── ProgressionLayout (Anchor interpolation for any MaxPlayerLevel)
+    ├── ProgressionLayout (Anchor interpolation for any MaxPlayerLevel, or the Journey preset)
+    ├── JourneyRules + JourneyData (Overlapping per-expansion ranges, endgame ladder, zone and instance tables)
     ├── ContentEra & ContentTier (Separates character level from content power)
     ├── ContentEraResolver (Era of maps, areas, creatures, quests and items from Map.dbc / AreaTable.dbc)
     ├── CombatBudgetProfile (Runtime HP / Damage / Mana / Armor normalization in instances)
@@ -42,6 +43,15 @@ The module never hardcodes max level to 60 or 80. It reads `CONFIG_MAX_PLAYER_LE
 - **Level 80 layout**: Classic `1-60`, TBC `60-70`, WotLK `70-80`.
 - **Interpolated layouts**: Any cap between 60 and 80 interpolates monotonically using reference anchors.
 - **Fail-safe validation**: Unsafe caps (>80) fail-fast with clean logging and safe Classic fallback.
+
+### 1a. The Journey Preset
+`CoAContentScaling.Progression.Mode = Journey` lays each expansion over its own, overlapping range instead of cutting the
+level space into consecutive bands: by default the old world 1-35, Outland 30-43, Northrend 40-55, with the heroics and
+raids of Outland and Northrend at the endgame level (60, bosses up to three above). The rules and the zone and instance
+tables come from [mod-world-journey](https://github.com/aspollon/mod-world-journey) by aspollon (AGPL v3):
+`JourneyRules.cpp` holds the arithmetic, `data/journey/` the original zone and instance levels, and
+`tools/make_journey_data.py` builds `include/JourneyData.h` from them. The zone table also names the era of each zone,
+ahead of the expansion `Map.dbc` gives its map. The regulators are the `CoAContentScaling.Journey.*` settings.
 
 ### 2. Combat Budget Normalization (Creature Stats)
 In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Simply lowering a creature's level in memory still uses the WotLK expansion multiplier table.
@@ -115,7 +125,7 @@ In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Si
 # Master switch
 CoAContentScaling.Enable = 1
 
-# Progression Mode: Auto or Custom
+# Progression Mode: Auto, Custom or Journey
 CoAContentScaling.Progression.Mode = "Auto"
 CoAContentScaling.Progression.ClassicEnd = 0
 CoAContentScaling.Progression.TbcEnd = 0

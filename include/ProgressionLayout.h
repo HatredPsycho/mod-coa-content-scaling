@@ -8,6 +8,7 @@
 
 #include "ContentEra.h"
 #include "Define.h"
+#include "JourneyRules.h"
 #include <algorithm>
 #include <cmath>
 #include <optional>
@@ -37,9 +38,17 @@ struct ProgressionLayout
     std::optional<LevelRange> tbc;
     std::optional<LevelRange> wotlk;
 
+    // The journey preset: the bands overlap, each expansion is laid over its own range by JourneyRules, and its
+    // heroics and raids stand at the endgame level.
+    bool journey{false};
+    journey::Rules journeyRules;
+
     // Factory to construct layout based on active packs, level cap and optional custom boundaries
     static ProgressionLayout Create(uint8 maxLevel, bool tbcEnabled, bool wotlkEnabled,
                                    uint8 customClassicEnd = 0, uint8 customTbcEnd = 0);
+
+    static ProgressionLayout CreateJourney(uint8 maxLevel, bool tbcEnabled, bool wotlkEnabled,
+                                          journey::Shape const& shape);
 
     [[nodiscard]] bool Validate(std::string& outError) const;
 

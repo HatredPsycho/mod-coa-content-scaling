@@ -7,6 +7,7 @@
 #include "Log.h"
 #include <algorithm>
 #include <cctype>
+#include <sstream>
 
 namespace CoAContentScalingConfig
 {
@@ -55,6 +56,9 @@ namespace CoAContentScalingConfig
         if (lower == "custom")
             return "Custom";
 
+        if (lower == "journey")
+            return "Journey";
+
         if (lower != "auto" && !lower.empty())
         {
             LOG_WARN("module.coa_content_scaling",
@@ -62,6 +66,26 @@ namespace CoAContentScalingConfig
         }
 
         return "Auto";
+    }
+
+    journey::Range ParseLevelRange(std::string_view key, std::string_view raw, journey::Range fallback)
+    {
+        std::string const s = Trim(raw);
+        if (s.empty())
+            return fallback;
+
+        int from = 0;
+        int to = 0;
+        char dash = 0;
+        std::istringstream in(s);
+        if (!(in >> from >> dash >> to) || dash != '-' || from < 1 || to < from || to > 255 || !(in >> std::ws).eof())
+        {
+            LOG_WARN("module.coa_content_scaling", "CoAContentScaling: {} = '{}' is not a range like 30-43; {}-{} is used.",
+                     key, s, fallback.from, fallback.to);
+            return fallback;
+        }
+
+        return { from, to };
     }
 
     SoloAssistMode ParseSoloAssistMode(std::string_view raw)

@@ -78,6 +78,7 @@ private:
         handler->PSendSysMessage("Map expansions: {} | Area maps: {} | Classic areas on Outland: {}",
             sContentEraResolver->GetMapExpansionCount(), sContentEraResolver->GetAreaMapCount(),
             sContentEraResolver->GetClassicAreaCount());
+        handler->PSendSysMessage("Zone eras from the journey tables: {}", sContentEraResolver->GetZoneEraCount());
         handler->PSendSysMessage("PvE instance profiles: {}", sInstanceProfileRegistry->GetProfileCount());
         return true;
     }
@@ -87,6 +88,11 @@ private:
         ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
         handler->PSendSysMessage("=== CoA Progression Layout ===");
         handler->PSendSysMessage("MaxPlayerLevel: {}", uint32(layout.maxLevel));
+        if (layout.journey)
+        {
+            journey::Shape const& shape = layout.journeyRules.GetShape();
+            handler->PSendSysMessage("Preset: Journey | Endgame: {} (+{} for bosses)", shape.endgame, shape.bossLevels);
+        }
         handler->PSendSysMessage("Classic: {} -> {}", uint32(layout.classic.minLevel), uint32(layout.classic.maxLevel));
         if (layout.tbc.has_value())
             handler->PSendSysMessage("TBC:     {} -> {}", uint32(layout.tbc->minLevel), uint32(layout.tbc->maxLevel));
