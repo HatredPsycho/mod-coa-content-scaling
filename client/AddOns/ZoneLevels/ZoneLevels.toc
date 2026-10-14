@@ -2,6 +2,6 @@
 ## Title: Zone Levels
 ## Notes: Journey layout of mod-coa-content-scaling: the world map shows the zone levels of the journey, the Dungeon Finder its dungeon levels, gems and enchantments their real values.
 ## Author: mod-world-journey (aspollon), carried by mod-coa-content-scaling
-## Version: 3
+## Version: 4
 ## SavedVariables: ZoneLevelsDB
 ZoneLevels.lua

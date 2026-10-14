@@ -6,11 +6,18 @@
 --   L<id>=<min>-<max>-<recommended>;...   the levels of the Dungeon Finder's dungeons (LFGDungeons.dbc of the
 --                         client still holds the original ones, and the Dungeon Finder hides what it thinks is too high)
 --   D                     the set is complete
--- The last complete set is kept, so the map is right even before the server has spoken.
+-- The last complete set is kept per realm, so the map is right even before the server has spoken, and a realm
+-- that does not play the journey never shows another realm's levels.
 
 local PREFIX = "ZoneLevels"
 local pending
 local frame = CreateFrame("Frame")
+
+-- This realm's set, or nil.
+local function Current()
+    local db = ZoneLevelsDB
+    return type(db) == "table" and type(db.realms) == "table" and db.realms[GetRealmName()] or nil
+end
 
 local function Apply(db)
     if not db then return end
@@ -24,7 +31,8 @@ end
 -- The Dungeon Finder: every place that reads the levels of a dungeon gets the ones of the journey.
 -- Fields of GetLFGDungeonInfo: 3 min level, 4 max level, 5 recommended, 6 lowest recommended, 7 highest recommended.
 local function DungeonLevels(id)
-    local all = ZoneLevelsDB and ZoneLevelsDB.dungeons
+    local db = Current()
+    local all = db and db.dungeons
     return all and all[id]
 end
 
@@ -67,7 +75,8 @@ local function RefreshDungeonFinder()
 end
 
 local function Retext(tooltip)
-    local texts = ZoneLevelsDB and ZoneLevelsDB.texts
+    local db = Current()
+    local texts = db and db.texts
     if not texts or not next(texts) then return end
     local name = tooltip:GetName()
     for i = 2, tooltip:NumLines() do
@@ -95,7 +104,7 @@ frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:SetScript("OnEvent", function(self, event, prefix, message, channel, sender)
     if event == "ADDON_LOADED" then
-        if prefix == PREFIX then Apply(ZoneLevelsDB) end
+        if prefix == PREFIX then Apply(Current()) end
         return
     end
     if event == "PLAYER_ENTERING_WORLD" then
@@ -122,9 +131,12 @@ frame:SetScript("OnEvent", function(self, event, prefix, message, channel, sende
         local before, after = body:match("^(.-)~(.*)$")
         if before and before ~= "" then pending.texts[before] = after end
     elseif kind == "D" then
-        ZoneLevelsDB = pending
+        if type(ZoneLevelsDB) ~= "table" or type(ZoneLevelsDB.realms) ~= "table" then
+            ZoneLevelsDB = { realms = {} }
+        end
+        ZoneLevelsDB.realms[GetRealmName()] = pending
         pending = nil
-        Apply(ZoneLevelsDB)
+        Apply(Current())
         RefreshDungeonFinder()
     end
 end)
