@@ -19,6 +19,20 @@ local function Current()
     return type(db) == "table" and type(db.realms) == "table" and db.realms[GetRealmName()] or nil
 end
 
+-- The client opens the Dungeon Finder at SHOW_LFD_LEVEL (15); on the journey it opens with the lowest dungeon.
+local function UnlockDungeonFinder(db)
+    local lowest
+    for _, levels in pairs(db.dungeons or {}) do
+        if not lowest or levels[1] < lowest then lowest = levels[1] end
+    end
+    if not lowest or type(SHOW_LFD_LEVEL) ~= "number" or lowest >= SHOW_LFD_LEVEL then return end
+    SHOW_LFD_LEVEL = lowest
+    if LFDMicroButton and type(SHOW_PVP_LEVEL) == "number" then
+        LFDMicroButton.minLevel = math.min(SHOW_PVP_LEVEL, lowest)
+    end
+    if type(UpdateMicroButtons) == "function" then pcall(UpdateMicroButtons) end
+end
+
 local function Apply(db)
     if not db then return end
     if type(WORLD_MAP_LEVELS) == "table" then
@@ -26,6 +40,7 @@ local function Apply(db)
             WORLD_MAP_LEVELS[key] = { levels[1], levels[2] }
         end
     end
+    UnlockDungeonFinder(db)
 end
 
 -- The Dungeon Finder: every place that reads the levels of a dungeon gets the ones of the journey.

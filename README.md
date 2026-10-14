@@ -67,7 +67,8 @@ The random bots of mod-playerbots follow the journey through the core's bot leve
 ride and fly when the journey's trainers teach it, and hunt each zone at its journey levels, Outland and Northrend
 included (the `coa-scaling` branch of the CoA fork of mod-playerbots reads it). The client addon
 `client/AddOns/ZoneLevels` (from mod-world-journey) shows the journey's zone levels on the world map, the Dungeon
-Finder's dungeons at their new levels and what gems and enchantments really give; copy it into the client's
+Finder's dungeons at their new levels, opening the Dungeon Finder from the lowest of them instead of level 15, and
+what gems and enchantments really give; copy it into the client's
 `Interface\AddOns` and clear the client cache once.
 
 ### 2. Combat Budget Normalization (Creature Stats)
