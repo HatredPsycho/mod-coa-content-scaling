@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "name": "Journey: a level 7 group is matched into Ragefire Chasm by the Dungeon Finder",
+  "contract": "Requires mod-coa-content-scaling with CoAContentScaling.Enable=1 and Progression.Mode=Journey (conf/verify-all-scaling.json). The journey opens Ragefire Chasm (LFG 4) at 7 and gives Random Classic Dungeon (258) the lowest entry of its dungeons, 7, where the client DBC says 15. Five level 7 Horde characters queue for 258 as tank, healer and damage; the proposal can only choose Ragefire Chasm, so accepting it takes all five to map 389.",
+  "timeout_ms": 120000,
+  "location": {
+    "map": 1,
+    "x": 1629.36,
+    "y": -4373.39,
+    "z": 31.26,
+    "o": 0
+  },
+  "players": [
+    {
+      "id": "p1",
+      "race": 2,
+      "class": 1,
+      "level": 7
+    },
+    {
+      "id": "p2",
+      "race": 2,
+      "class": 1,
+      "level": 7
+    },
+    {
+      "id": "p3",
+      "race": 2,
+      "class": 1,
+      "level": 7
+    },
+    {
+      "id": "p4",
+      "race": 2,
+      "class": 1,
+      "level": 7
+    },
+    {
+      "id": "p5",
+      "race": 2,
+      "class": 1,
+      "level": 7
+    }
+  ],
+  "steps": [
+    {
+      "action": "wait",
+      "ms": 3000
+    },
+    {
+      "action": "group",
+      "actor": "p1",
+      "target": "p2"
+    },
+    {
+      "action": "group",
+      "actor": "p1",
+      "target": "p3"
+    },
+    {
+      "action": "group",
+      "actor": "p1",
+      "target": "p4"
+    },
+    {
+      "action": "group",
+      "actor": "p1",
+      "target": "p5"
+    },
+    {
+      "action": "lfg_join",
+      "label": "A level 7 group queues for Random Classic Dungeon",
+      "actor": "p1",
+      "dungeons": [
+        258
+      ],
+      "roles": 3
+    },
+    {
+      "action": "lfg_set_roles",
+      "actor": "p2",
+      "roles": 4
+    },
+    {
+      "action": "lfg_set_roles",
+      "actor": "p3",
+      "roles": 8
+    },
+    {
+      "action": "lfg_set_roles",
+      "actor": "p4",
+      "roles": 8
+    },
+    {
+      "action": "lfg_set_roles",
+      "actor": "p5",
+      "roles": 8
+    },
+    {
+      "action": "wait",
+      "ms": 20000
+    },
+    {
+      "action": "lfg_accept",
+      "actor": "p1"
+    },
+    {
+      "action": "lfg_accept",
+      "actor": "p2"
+    },
+    {
+      "action": "lfg_accept",
+      "actor": "p3"
+    },
+    {
+      "action": "lfg_accept",
+      "actor": "p4"
+    },
+    {
+      "action": "lfg_accept",
+      "actor": "p5"
+    },
+    {
+      "action": "assert",
+      "label": "p1 enters Ragefire Chasm, the only dungeon open at level 7",
+      "actor": "p1",
+      "metric": "map_id",
+      "equals": 389,
+      "within_ms": 20000
+    },
+    {
+      "action": "assert",
+      "label": "p2 enters Ragefire Chasm, the only dungeon open at level 7",
+      "actor": "p2",
+      "metric": "map_id",
+      "equals": 389,
+      "within_ms": 20000
+    },
+    {
+      "action": "assert",
+      "label": "p3 enters Ragefire Chasm, the only dungeon open at level 7",
+      "actor": "p3",
+      "metric": "map_id",
+      "equals": 389,
+      "within_ms": 20000
+    },
+    {
+      "action": "assert",
+      "label": "p4 enters Ragefire Chasm, the only dungeon open at level 7",
+      "actor": "p4",
+      "metric": "map_id",
+      "equals": 389,
+      "within_ms": 20000
+    },
+    {
+      "action": "assert",
+      "label": "p5 enters Ragefire Chasm, the only dungeon open at level 7",
+      "actor": "p5",
+      "metric": "map_id",
+      "equals": 389,
+      "within_ms": 20000
+    }
+  ]
+}
