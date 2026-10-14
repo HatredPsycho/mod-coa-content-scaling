@@ -61,6 +61,20 @@ namespace journey
         ITEM_WOTLK
     };
 
+    struct CreaturePlan
+    {
+        Era era = ERA_KEEP;
+        int minLevel = 0;
+        int maxLevel = 0;
+    };
+
+    struct QuestPlan
+    {
+        Era era = ERA_CLASSIC;
+        int level = 0;
+        int minLevel = 0;
+    };
+
     struct ItemPlan
     {
         ItemEra era = ITEM_KEEP;
@@ -73,6 +87,9 @@ namespace journey
     Era EraOf(uint32_t map, int level, bool heroic);
     /// Something that is nowhere to be found: judged by its level.
     Era EraByLevel(int level);
+    /// The era of a creature template: by the map most of its spawns are on (or its normal difficulty's, for a
+    /// heroic or raid template), by its level when it is spawned nowhere. The world bosses of the old world stay.
+    Era CreatureEra(bool spawned, uint32_t map, int originalMax, bool heroic, bool worldBoss);
     bool IsInstanceOfOutland(uint32_t map);
     bool IsInstanceOfNorthrend(uint32_t map);
     bool IsClassicRaid(uint32_t map);
@@ -106,6 +123,13 @@ namespace journey
         /// Raids and heroics: their trash at the endgame, their bosses a few levels above.
         [[nodiscard]] int Top(int level, int base) const;
         [[nodiscard]] int Compress(int level, Era era) const;
+
+        /// A creature template's levels on the journey.
+        [[nodiscard]] CreaturePlan PlanCreature(int originalMin, int originalMax, Era era) const;
+        /// A quest's level and minimum level on the journey: by the map of whoever starts it, raised to the level
+        /// its equipment reward asks for, moved with a zone set by hand.
+        [[nodiscard]] QuestPlan PlanQuest(int level, int minLevel, bool located, uint32_t starterMap,
+            int rewardRequiredLevel, int zoneShift) const;
 
         /// The entry level of a zone, from its original one and the part it belongs to (0 classic, 1 Outland, 2
         /// Northrend). A level set by hand wins.

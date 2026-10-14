@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds include/JourneyData.h from data/journey/: the zones with the original entry levels of the client, and the
+"""Builds include/JourneyData.h from data/journey/: the zones with the original entry levels of the client, the
 instances with their entry levels and creature levels, as they came. The module lays them over the journey at every
 start, by its regulators.
 
@@ -41,6 +41,11 @@ def build():
         kind = 2 if mapid in RAIDS else 1 if difficulty > 0 else 0
         instances.append((mapid, difficulty, kind, low, max(content.get(mapid, low), low), name.replace('"', "'")))
 
+    bots = []
+    for line in lines('source_bot_zones.tsv'):
+        zone, low, high, era, name = line.split('	')
+        bots.append((int(zone), int(low), int(high), PART[era], name))
+
     out = [
         '/*',
         ' * CoA Universal Content Scaling',
@@ -65,6 +70,7 @@ def build():
         '        uint8_t contentLevel;',
         '        char const* name;',
         '    };',
+        '    struct BotZoneData { uint32_t zone; uint8_t originalMin; uint8_t originalMax; uint8_t part; };',
         '',
         '    inline constexpr ZoneData Zones[] =',
         '    {',
@@ -72,13 +78,16 @@ def build():
     out += [f'        {{ {z[0]}, {z[1]}, {z[2]}, {z[3]}, "{z[4]}" }},' for z in zones]
     out += ['    };', '', '    inline constexpr InstanceData Instances[] =', '    {']
     out += [f'        {{ {i[0]}, {i[1]}, {i[2]}, {i[3]}, {i[4]}, "{i[5]}" }},' for i in instances]
+    out += ['    };', '', '    // The zone brackets mod-playerbots ships with, the levels its random bots hunt at.',
+            '    inline constexpr BotZoneData BotZones[] =', '    {']
+    out += [f'        {{ {b[0]}, {b[1]}, {b[2]}, {b[3]} }}, // {b[4]}' for b in bots]
     out += ['    };', '}', '', '#endif // COA_JOURNEY_DATA_H', '']
 
     with open(OUT, 'w', encoding='utf-8', newline='\n') as f:
         f.write('\n'.join(out))
-    return len(zones), len(instances)
+    return len(zones), len(instances), len(bots)
 
 
 if __name__ == '__main__':
-    zone_count, instance_count = build()
-    print(zone_count, 'zones,', instance_count, 'instance entries')
+    zone_count, instance_count, bot_count = build()
+    print(zone_count, 'zones,', instance_count, 'instance entries,', bot_count, 'bot zones')

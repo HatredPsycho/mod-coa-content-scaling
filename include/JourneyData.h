@@ -21,6 +21,7 @@ namespace journey
         uint8_t contentLevel;
         char const* name;
     };
+    struct BotZoneData { uint32_t zone; uint8_t originalMin; uint8_t originalMax; uint8_t part; };
 
     inline constexpr ZoneData Zones[] =
     {
@@ -211,6 +212,70 @@ namespace journey
         { 724, 1, 2, 80, 81, "The Ruby Sanctum" },
         { 724, 2, 2, 80, 81, "The Ruby Sanctum" },
         { 724, 3, 2, 80, 81, "The Ruby Sanctum" },
+    };
+
+    // The zone brackets mod-playerbots ships with, the levels its random bots hunt at.
+    inline constexpr BotZoneData BotZones[] =
+    {
+        { 1, 5, 12, 0 }, // Dun Morogh
+        { 12, 5, 12, 0 }, // Elwynn Forest
+        { 14, 5, 12, 0 }, // Durotar
+        { 85, 5, 12, 0 }, // Tirisfal Glades
+        { 141, 5, 12, 0 }, // Teldrassil
+        { 215, 5, 12, 0 }, // Mulgore
+        { 3430, 5, 12, 0 }, // Eversong Woods
+        { 3524, 5, 12, 0 }, // Azuremyst Isle
+        { 17, 10, 25, 0 }, // Barrens
+        { 38, 10, 20, 0 }, // Loch Modan
+        { 40, 10, 21, 0 }, // Westfall
+        { 130, 10, 23, 0 }, // Silverpine Forest
+        { 148, 10, 21, 0 }, // Darkshore
+        { 3433, 10, 22, 0 }, // Ghostlands
+        { 3525, 10, 21, 0 }, // Bloodmyst Isle
+        { 10, 19, 33, 0 }, // Duskwood
+        { 11, 21, 30, 0 }, // Wetlands
+        { 44, 16, 28, 0 }, // Redridge Mountains
+        { 267, 20, 34, 0 }, // Hillsbrad Foothills
+        { 331, 18, 33, 0 }, // Ashenvale
+        { 400, 24, 36, 0 }, // Thousand Needles
+        { 406, 16, 29, 0 }, // Stonetalon Mountains
+        { 3, 36, 46, 0 }, // Badlands
+        { 8, 36, 46, 0 }, // Swamp of Sorrows
+        { 15, 35, 46, 0 }, // Dustwallow Marsh
+        { 16, 45, 52, 0 }, // Azshara
+        { 33, 32, 47, 0 }, // Stranglethorn Vale
+        { 45, 30, 42, 0 }, // Arathi Highlands
+        { 47, 42, 51, 0 }, // Hinterlands
+        { 51, 45, 51, 0 }, // Searing Gorge
+        { 357, 40, 52, 0 }, // Feralas
+        { 405, 30, 41, 0 }, // Desolace
+        { 440, 41, 52, 0 }, // Tanaris
+        { 4, 52, 57, 0 }, // Blasted Lands
+        { 28, 50, 60, 0 }, // Western Plaguelands
+        { 46, 51, 60, 0 }, // Burning Steppes
+        { 139, 54, 62, 0 }, // Eastern Plaguelands
+        { 361, 47, 57, 0 }, // Felwood
+        { 490, 49, 56, 0 }, // Un'Goro Crater
+        { 618, 54, 61, 0 }, // Winterspring
+        { 1377, 54, 63, 0 }, // Silithus
+        { 3483, 58, 66, 1 }, // Hellfire Peninsula
+        { 3518, 64, 70, 1 }, // Nagrand
+        { 3519, 62, 73, 1 }, // Terokkar Forest
+        { 3520, 66, 73, 1 }, // Shadowmoon Valley
+        { 3521, 60, 67, 1 }, // Zangarmarsh
+        { 3522, 64, 73, 1 }, // Blade's Edge Mountains
+        { 3523, 67, 73, 1 }, // Netherstorm
+        { 4080, 68, 73, 1 }, // Isle of Quel'Danas
+        { 65, 71, 77, 2 }, // Dragonblight
+        { 66, 74, 80, 2 }, // Zul'Drak
+        { 67, 77, 80, 2 }, // Storm Peaks
+        { 210, 77, 80, 2 }, // Icecrown Glacier
+        { 394, 72, 78, 2 }, // Grizzly Hills
+        { 495, 68, 74, 2 }, // Howling Fjord
+        { 2817, 77, 80, 2 }, // Crystalsong Forest
+        { 3537, 68, 75, 2 }, // Borean Tundra
+        { 3711, 75, 80, 2 }, // Sholazar Basin
+        { 4197, 79, 80, 2 }, // Wintergrasp
     };
 }
 

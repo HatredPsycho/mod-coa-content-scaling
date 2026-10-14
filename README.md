@@ -53,6 +53,11 @@ tables come from [mod-world-journey](https://github.com/aspollon/mod-world-journ
 `tools/make_journey_data.py` builds `include/JourneyData.h` from them. The zone table also names the era of each zone,
 ahead of the expansion `Map.dbc` gives its map. The regulators are the `CoAContentScaling.Journey.*` settings.
 
+On the journey the loaded creature templates are rewritten at startup (levels, gold and, on the way, the base stats of
+the old world), quests are given the levels of the map whoever starts them stands on, instances open at their journey
+entry, and the Dungeon Finder offers every dungeon from that entry to the cap. Outland and Northrend scale for a
+character like the old world does, and the level window places a lifted creature by its place in its zone.
+
 ### 2. Combat Budget Normalization (Creature Stats)
 In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Simply lowering a creature's level in memory still uses the WotLK expansion multiplier table.
 `mod-coa-content-scaling` addresses this by decoupling **Character Level** from **Content Power**:

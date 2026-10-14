@@ -121,6 +121,76 @@ TEST(JourneyRulesTest, MapsBelongToTheirPartOfTheJourney)
     EXPECT_EQ(journey::PartOf(journey::ERA_TOP_NORTHREND), 3);
 }
 
+TEST(JourneyRulesTest, ACreatureTakesTheEraOfWhereItIsSpawned)
+{
+    EXPECT_EQ(journey::CreatureEra(true, 0, 30, false, false), journey::ERA_CLASSIC);
+    EXPECT_EQ(journey::CreatureEra(true, 530, 20, false, false), journey::ERA_CLASSIC);
+    EXPECT_EQ(journey::CreatureEra(true, 530, 64, false, false), journey::ERA_OUTLAND);
+    EXPECT_EQ(journey::CreatureEra(true, 543, 62, true, false), journey::ERA_TOP_OUTLAND);
+    EXPECT_EQ(journey::CreatureEra(true, 631, 82, false, false), journey::ERA_TOP_NORTHREND);
+    EXPECT_EQ(journey::CreatureEra(true, 409, 62, false, true), journey::ERA_KEEP);
+
+    // The bosses of the old world stay; what else stands above 60 there came from Outland or Northrend.
+    EXPECT_EQ(journey::CreatureEra(true, 0, 63, false, true), journey::ERA_KEEP);
+    EXPECT_EQ(journey::CreatureEra(true, 1, 62, false, false), journey::ERA_OUTLAND);
+    EXPECT_EQ(journey::CreatureEra(true, 0, 75, false, false), journey::ERA_NORTHREND);
+
+    // Spawned nowhere: judged by its level, a summoned world boss of the old world kept.
+    EXPECT_EQ(journey::CreatureEra(false, 0, 63, false, true), journey::ERA_KEEP);
+    EXPECT_EQ(journey::CreatureEra(false, 0, 70, false, false), journey::ERA_OUTLAND);
+    EXPECT_EQ(journey::CreatureEra(false, 0, 40, false, false), journey::ERA_CLASSIC);
+}
+
+TEST(JourneyRulesTest, ACreatureTemplateIsLaidOverItsEra)
+{
+    journey::Rules const rules = DefaultRules();
+
+    journey::CreaturePlan const hellfire = rules.PlanCreature(58, 60, journey::ERA_OUTLAND);
+    EXPECT_EQ(hellfire.minLevel, 30);
+    EXPECT_EQ(hellfire.maxLevel, 33);
+
+    journey::CreaturePlan const blackTemple = rules.PlanCreature(70, 73, journey::ERA_TOP_OUTLAND);
+    EXPECT_EQ(blackTemple.minLevel, 60);
+    EXPECT_EQ(blackTemple.maxLevel, 63);
+
+    journey::CreaturePlan const kept = rules.PlanCreature(60, 63, journey::ERA_KEEP);
+    EXPECT_EQ(kept.minLevel, 60);
+    EXPECT_EQ(kept.maxLevel, 63);
+}
+
+TEST(JourneyRulesTest, AQuestFollowsWhoStartsItAndWhatItRewards)
+{
+    journey::Rules const rules = DefaultRules();
+
+    journey::QuestPlan const hellfire = rules.PlanQuest(60, 58, true, 530, 0, 0);
+    EXPECT_EQ(hellfire.era, journey::ERA_OUTLAND);
+    EXPECT_EQ(hellfire.level, 33);
+    EXPECT_EQ(hellfire.minLevel, 30);
+
+    journey::QuestPlan const shifted = rules.PlanQuest(60, 58, true, 530, 0, 2);
+    EXPECT_EQ(shifted.level, 35);
+    EXPECT_EQ(shifted.minLevel, 32);
+
+    // A quest of the old world that hands out what a raid asks for stands at the level of its reward, never
+    // above the level it was written for.
+    journey::QuestPlan const attunement = rules.PlanQuest(55, 50, true, 0, 60, 0);
+    EXPECT_EQ(attunement.era, journey::ERA_CLASSIC);
+    EXPECT_EQ(attunement.level, 55);
+    EXPECT_EQ(attunement.minLevel, 32);
+
+    journey::QuestPlan const minAboveLevel = rules.PlanQuest(10, 12, false, 0, 0, 0);
+    EXPECT_EQ(minAboveLevel.level, 7);
+    EXPECT_EQ(minAboveLevel.minLevel, 7);
+
+    journey::QuestPlan const followsCharacter = rules.PlanQuest(-1, 10, false, 0, 0, 0);
+    EXPECT_EQ(followsCharacter.level, -1);
+    EXPECT_EQ(followsCharacter.minLevel, 7);
+
+    journey::QuestPlan const portal = rules.PlanQuest(70, 58, true, 0, 0, 0);
+    EXPECT_EQ(portal.era, journey::ERA_OUTLAND);
+    EXPECT_EQ(portal.level, 47);
+}
+
 TEST(JourneyRulesTest, ZoneEntriesFollowTheirPartAndHandSetLevelsWin)
 {
     journey::Shape shape;

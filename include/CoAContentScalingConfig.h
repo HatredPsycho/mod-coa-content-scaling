@@ -29,6 +29,10 @@ namespace CoAContentScalingConfigKeys
     inline constexpr char const* JourneyOutlandItemLevels = "CoAContentScaling.Journey.Endgame.Outland.ItemLevels";
     inline constexpr char const* JourneyNorthrendItemLevels = "CoAContentScaling.Journey.Endgame.Northrend.ItemLevels";
     inline constexpr char const* JourneyZonePrefix = "CoAContentScaling.Journey.Zone.";
+    inline constexpr char const* JourneyCreatureBaseStats = "CoAContentScaling.Journey.Creatures.BaseStats";
+    inline constexpr char const* JourneyWindowEnable = "CoAContentScaling.Journey.Window.Enable";
+    inline constexpr char const* JourneyWindowBelow = "CoAContentScaling.Journey.Window.Below";
+    inline constexpr char const* JourneyWindowAbove = "CoAContentScaling.Journey.Window.Above";
     inline constexpr char const* JourneyInstancePrefix = "CoAContentScaling.Journey.Instance.";
     inline constexpr char const* GroupScalingEnable = "CoAContentScaling.GroupScaling.Enable";
     inline constexpr char const* GroupScalingLockOnEncounterStart = "CoAContentScaling.GroupScaling.LockOnEncounterStart";

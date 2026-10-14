@@ -123,6 +123,31 @@ CoAContentScaling.Journey.Endgame.Northrend.ItemLevels = 95-140
 #     Default:     none
 
 #
+# CoAContentScaling.Journey.Creatures.BaseStats
+#     Description: The base statistics of the creatures of the old world, Outland and Northrend that the
+#                  journey moves: "journey" builds them from the old world's table, which rises to 60
+#                  without the jumps of the later tables; "original" keeps their expansion's. The heroics
+#                  and raids keep theirs either way.
+#     Default:     journey
+#
+CoAContentScaling.Journey.Creatures.BaseStats = journey
+
+#
+# CoAContentScaling.Journey.Window.Enable
+# CoAContentScaling.Journey.Window.Below
+# CoAContentScaling.Journey.Window.Above
+#     Description: Where an open-world creature lifted to a character stands for that character: by its
+#                  place in its zone, from Below levels under the character (the zone's lowest creatures)
+#                  to Above levels over it (its highest), one more for an elite or a rare. Without the
+#                  window every lifted creature stands at the character's level minus
+#                  DestinyWeaver.Scaling.Offset. Below and Above are 0-10.
+#     Default:     1, 2, 2
+#
+CoAContentScaling.Journey.Window.Enable = 1
+CoAContentScaling.Journey.Window.Below = 2
+CoAContentScaling.Journey.Window.Above = 2
+
+#
 # CoAContentScaling.AuthenticMaps
 #     Description: Comma separated map ids played at their authored levels on every difficulty.
 #                  Creatures keep their level, health and damage, entry keeps its authored level

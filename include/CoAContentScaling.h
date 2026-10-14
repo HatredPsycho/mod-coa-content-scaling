@@ -11,6 +11,7 @@
 #include "ContentTier.h"
 #include "Define.h"
 #include "InstanceScaleContext.h"
+#include "JourneyContent.h"
 #include "ObjectGuid.h"
 #include "ProgressionLayout.h"
 #include <atomic>
@@ -38,6 +39,7 @@ public:
     static journey::Shape LoadJourneyShape();
     void FinalizeAndInitialize();
     void LoadContentEras();
+    [[nodiscard]] static ContentEra EraOfJourney(journey::Era era);
     void InitializeLayout();
 
     // Rewrites the item templates, once the world has loaded them.
@@ -144,6 +146,7 @@ private:
 
     ProgressionLayout _layout;
     journey::Shape _journeyShape;
+    JourneySettings _journeySettings;
     std::unordered_set<uint32> _authenticMaps;
     std::unordered_set<uint32> _authenticHeroicMaps;
     uint8 _authenticHeroicMinLevel{60};

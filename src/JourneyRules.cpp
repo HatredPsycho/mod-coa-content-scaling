@@ -97,6 +97,44 @@ namespace journey
         }
     }
 
+    CreaturePlan Rules::PlanCreature(int originalMin, int originalMax, Era era) const
+    {
+        CreaturePlan plan;
+        plan.era = era;
+        plan.minLevel = Compress(originalMin, era);
+        plan.maxLevel = std::max(plan.minLevel, Compress(originalMax, era));
+        return plan;
+    }
+
+    QuestPlan Rules::PlanQuest(int level, int minLevel, bool located, uint32_t starterMap, int rewardRequiredLevel,
+        int zoneShift) const
+    {
+        int const reference = std::clamp(level > 0 ? level : minLevel, 0, 255);
+        QuestPlan plan;
+        plan.era = located ? EraOf(starterMap, reference, false) : EraByLevel(reference);
+        if (plan.era == ERA_CLASSIC && reference > 60)
+            plan.era = EraByLevel(reference);       // the way to Outland and Northrend starts in the old world
+
+        plan.level = level > 0 ? Compress(std::min(level, 255), plan.era) : level;
+        // What a quest gives can ask for more than its new level: a quest of the old world that leads into the
+        // raids, or one of Outland that hands out what Outland's raids hand out. Such a quest stands at the level
+        // of its reward.
+        if (plan.level > 0 && rewardRequiredLevel > plan.level + 3)
+            plan.level = std::min(std::max(rewardRequiredLevel, plan.level), std::max(level, 1));
+        plan.minLevel = minLevel ? Compress(minLevel, plan.era) : minLevel;
+
+        if (zoneShift)
+        {
+            if (plan.level > 0)
+                plan.level = std::clamp(plan.level + zoneShift, 1, _shape.endgame);
+            if (plan.minLevel > 0)
+                plan.minLevel = std::clamp(plan.minLevel + zoneShift, 1, _shape.endgame);
+        }
+        if (plan.level > 0 && plan.minLevel > plan.level)
+            plan.minLevel = plan.level;
+        return plan;
+    }
+
     bool IsInstanceOfOutland(uint32_t map) { return OutlandInstances.count(map) || OutlandRaids.count(map); }
     bool IsInstanceOfNorthrend(uint32_t map) { return NorthrendInstances.count(map) || NorthrendRaids.count(map); }
     bool IsClassicRaid(uint32_t map) { return ClassicRaids.count(map) != 0; }
@@ -127,6 +165,24 @@ namespace journey
         if (level <= 60)
             return ERA_CLASSIC;
         return level <= 72 ? ERA_OUTLAND : ERA_NORTHREND;
+    }
+
+    Era CreatureEra(bool spawned, uint32_t map, int originalMax, bool heroic, bool worldBoss)
+    {
+        Era era;
+        if (spawned)
+            era = EraOf(map, originalMax, heroic);
+        else
+            // Ragnaros, summoned by his steward
+            era = worldBoss && originalMax <= 63 ? ERA_KEEP : EraByLevel(originalMax);
+
+        // The bosses of the old world - Azuregos, Kazzak, the dragons - stay as they are. Whatever else stands
+        // above 60 in the old world was sent there from Outland or Northrend, and goes by their measure.
+        if (era == ERA_CLASSIC && worldBoss)
+            return ERA_KEEP;
+        if (era == ERA_CLASSIC && originalMax > 60)
+            return EraByLevel(originalMax);
+        return era;
     }
 
     int PartOf(Era era)

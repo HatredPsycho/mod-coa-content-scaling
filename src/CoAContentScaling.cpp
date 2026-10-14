@@ -22,6 +22,7 @@
 #include "InstanceProfile.h"
 #include "InstanceScaleContext.h"
 #include "ItemBudgetScaler.h"
+#include "JourneyContent.h"
 #include "LFGMgr.h"
 #include "ContentScalingHooks.h"
 #include "Log.h"
@@ -76,6 +77,13 @@ void CoAContentScaling::LoadConfig()
 
     _tbcEnabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::TbcEnable, false);
     _journeyShape = LoadJourneyShape();
+    _journeySettings.journeyBaseStats =
+        sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::JourneyCreatureBaseStats, "journey") != "original";
+    _journeySettings.window = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyWindowEnable, true);
+    _journeySettings.windowBelow =
+        std::clamp(sConfigMgr->GetOption<int32>(CoAContentScalingConfigKeys::JourneyWindowBelow, 2), 0, 10);
+    _journeySettings.windowAbove =
+        std::clamp(sConfigMgr->GetOption<int32>(CoAContentScalingConfigKeys::JourneyWindowAbove, 2), 0, 10);
     _wotlkEnabled = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::WotlkEnable, false);
 
     std::string const soloMode = sConfigMgr->GetOption<std::string>(CoAContentScalingConfigKeys::SoloAssistMode, "0");
@@ -195,6 +203,32 @@ void CoAContentScaling::LoadContentEras()
     sInstanceProfileRegistry->Initialize();
     sContentEraResolver->LoadClientData();
     sContentEraResolver->Finalize();
+
+    if (!_layout.journey)
+        return;
+
+    // The authored levels are read here, before the items are rewritten: a quest stands at the level its
+    // equipment reward asks for.
+    JourneyBuildReport const report = sJourneyContent->Build(_layout.journeyRules, _journeySettings, _layout.maxLevel,
+        [this](uint32 mapId, uint8 difficulty) { return IsAuthenticMap(mapId, difficulty); });
+    LOG_INFO("server.loading", "CoAContentScaling: the journey moved {} of {} creature templates and {} quests, "
+             "and {} Dungeon Finder entries", report.creaturesMoved, report.creatureTemplates, report.questsMoved,
+             report.dungeonFinderEntries);
+}
+
+ContentEra CoAContentScaling::EraOfJourney(journey::Era era)
+{
+    switch (era)
+    {
+        case journey::ERA_OUTLAND:
+        case journey::ERA_TOP_OUTLAND:
+            return ContentEra::TBC;
+        case journey::ERA_NORTHREND:
+        case journey::ERA_TOP_NORTHREND:
+            return ContentEra::WotLK;
+        default:
+            return ContentEra::Classic;
+    }
 }
 
 namespace
@@ -477,6 +511,10 @@ uint8 CoAContentScaling::GetEffectiveCreatureLevel(CreatureTemplate const* cinfo
     if (IsAuthenticMap(map))
         return authoredLevel;
 
+    // On the journey the templates already carry their levels; only a zone or an instance set by hand moves them.
+    if (_layout.journey)
+        return static_cast<uint8>(std::clamp<int>(int(authoredLevel) + sJourneyContent->GetCreatureShift(creature), 1, 255));
+
     uint32 const mapId = map ? map->GetId() : (creature ? 0 : ContentEraResolver::MAP_UNSPECIFIED);
     uint32 const areaId = creature ? creature->GetAreaId() : 0;
 
@@ -494,6 +532,16 @@ int32 CoAContentScaling::GetEffectiveQuestLevel(Quest const* quest) const
     int32 const authoredLevel = quest->GetQuestLevel();
     if (authoredLevel <= 0)
         return authoredLevel;
+
+    if (_layout.journey)
+    {
+        std::optional<journey::QuestPlan> const plan = sJourneyContent->GetQuestPlan(quest->GetQuestId());
+        if (!plan)
+            return authoredLevel;
+        if (!_layout.IsEraEnabled(EraOfJourney(plan->era)))
+            return 255; // Lock out quest from disabled expansion
+        return plan->level;
+    }
 
     ContentEra const era = _layout.ResolveContentEra(sContentEraResolver->ResolveEraForQuest(
         quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(authoredLevel)),
@@ -513,6 +561,16 @@ uint32 CoAContentScaling::GetEffectiveQuestMinLevel(Quest const* quest) const
     uint32 const authoredMin = quest->GetMinLevel();
     if (authoredMin <= 1)
         return authoredMin;
+
+    if (_layout.journey)
+    {
+        std::optional<journey::QuestPlan> const plan = sJourneyContent->GetQuestPlan(quest->GetQuestId());
+        if (!plan)
+            return authoredMin;
+        if (!_layout.IsEraEnabled(EraOfJourney(plan->era)))
+            return 255; // Lock out quest from disabled expansion
+        return static_cast<uint32>(std::max(plan->minLevel, 1));
+    }
 
     ContentEra const era = _layout.ResolveContentEra(sContentEraResolver->ResolveEraForQuest(
         quest->GetQuestId(), quest->GetZoneOrSort(), 0, static_cast<uint8>(authoredMin)),
@@ -871,6 +929,18 @@ namespace
                     return sCoAContentScaling->IsAuthenticMap(mapId, difficulty);
                 }, std::memory_order_relaxed);
 
+                bool const journey = sCoAContentScaling->GetLayout().journey;
+                LocalLevelScaling::CreatureWindowOwner.store(journey ?
+                    [](Player const* viewer, Creature const* creature, uint8 ownLevel) -> uint8
+                    {
+                        return sJourneyContent->GetWindowLevel(viewer, creature, ownLevel);
+                    } : LocalLevelScaling::CreatureWindowResolver(nullptr), std::memory_order_relaxed);
+                LocalLevelScaling::ScalingScopeOwner.store(journey ?
+                    [](std::vector<uint32>& worldMaps, std::vector<std::pair<uint32, LocalLevelScaling::LevelBand>>& bands)
+                    {
+                        sJourneyContent->AddScalingScope(worldMaps, bands);
+                    } : LocalLevelScaling::ScalingScopeResolver(nullptr), std::memory_order_relaxed);
+
                 LocalLevelScaling::QuestBaseLevelOwner.store([](Quest const* quest) -> int32
                 {
                     return sCoAContentScaling->GetEffectiveQuestLevel(quest);
@@ -1047,6 +1117,8 @@ namespace
             else
             {
                 LocalLevelScaling::AuthenticMapOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::CreatureWindowOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::ScalingScopeOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::AbilityRequiredLevelOwner.store(nullptr, std::memory_order_relaxed);
@@ -1095,6 +1167,10 @@ namespace
                 lockData = lfg::LFG_LOCKSTATUS_INSUFFICIENT_EXPANSION;
                 return;
             }
+
+            // On the journey the finder's own entries were moved at startup, so its levels already hold.
+            if (sCoAContentScaling->GetLayout().journey)
+                return;
 
             // Compute the effective level at which this dungeon opens
             auto const& layout = sCoAContentScaling->GetLayout();
@@ -1477,6 +1553,18 @@ namespace
             }
 
             auto const& layout = sCoAContentScaling->GetLayout();
+            if (layout.journey)
+            {
+                // An instance opens at its journey entry and stays open to the cap.
+                std::optional<uint8> entry = sJourneyContent->GetInstanceEntry(mapId, uint8(difficulty));
+                if (!entry && difficulty != REGULAR_DIFFICULTY)
+                    entry = sJourneyContent->GetInstanceEntry(mapId, REGULAR_DIFFICULTY);
+                if (entry && minLevel > 0)
+                    minLevel = *entry;
+                maxLevel = 0;
+                return;
+            }
+
             if (minLevel > 0)
                 minLevel = layout.MapAuthoredToEffective(era, minLevel);
             if (maxLevel > 0)
