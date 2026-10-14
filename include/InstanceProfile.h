@@ -18,7 +18,7 @@
 struct InstanceProfile
 {
     uint32 mapId{0};
-    std::string_view name;
+    std::string name;
     ContentEra era{ContentEra::Classic};
     ContentTier tier{ContentTier::DUNGEON_NORMAL};
     MapContentKind kind{MapContentKind::DUNGEON};
@@ -33,20 +33,31 @@ class InstanceProfileRegistry
 public:
     static InstanceProfileRegistry* Instance();
 
+    // Builds a profile for every dungeon and raid the client data names, sized by MapDifficulty.dbc
+    // and tiered by the authored raid tiers.
     void Initialize();
+    void Clear();
+    void RegisterProfile(InstanceProfile profile);
+    void RegisterMapKind(uint32 mapId, MapContentKind kind);
+
     [[nodiscard]] InstanceProfile const* GetProfile(uint32 mapId) const;
     [[nodiscard]] std::optional<ContentEra> GetEraForMap(uint32 mapId, uint8 difficulty = 0) const;
     [[nodiscard]] ContentTier GetTierForMap(uint32 mapId, uint8 difficulty = 0) const;
     [[nodiscard]] uint32 GetIntendedPlayers(uint32 mapId, uint8 difficulty) const;
     [[nodiscard]] MapContentKind GetKindForMap(uint32 mapId) const;
     [[nodiscard]] bool HasProfile(uint32 mapId) const;
+    [[nodiscard]] size_t GetProfileCount() const { return _profiles.size(); }
+
+    [[nodiscard]] static ContentTier GetAuthoredTier(uint32 mapId, bool isRaid);
+    [[nodiscard]] static bool IsCustomMap(uint32 mapId);
 
     [[nodiscard]] bool ValidateAll(std::vector<std::string>& issues) const;
 
 private:
-    InstanceProfileRegistry();
+    InstanceProfileRegistry() = default;
 
     std::unordered_map<uint32, InstanceProfile> _profiles;
+    std::unordered_map<uint32, MapContentKind> _kinds;
 };
 
 #define sInstanceProfileRegistry InstanceProfileRegistry::Instance()

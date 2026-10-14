@@ -9,7 +9,7 @@
 #include "Config.h"
 #include "ItemBudgetScaler.h"
 #include "ItemTemplate.h"
-#include "LocalLevelScaling.h"
+#include "ContentScalingHooks.h"
 #include "ObjectGuid.h"
 #include "ObjectMgr.h"
 #include "Player.h"

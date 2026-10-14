@@ -4,7 +4,7 @@
  */
 
 #include "CombatBudgetProfile.h"
-#include "ContentPackRegistry.h"
+#include "ContentEraResolver.h"
 #include "Creature.h"
 #include "CreatureData.h"
 #include "Map.h"
@@ -79,7 +79,7 @@ CreatureScaleContext CombatBudgetProfile::BuildContext(CreatureTemplate const* c
     uint32 const areaId = creature ? creature->GetAreaId() : 0;
 
     // Resolve era
-    context.era = sContentPackRegistry->ResolveEraForCreature(
+    context.era = sContentEraResolver->ResolveEraForCreature(
         cinfo->Entry, mapId, areaId, cinfo->expansion, cinfo->maxlevel);
 
     if (map)

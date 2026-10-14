@@ -19,7 +19,7 @@ CoAContentScaling.Enable = 0
 #
 # CoAContentScaling.Progression.Mode
 #     Description: Progression layout boundary mode.
-#     Values:      Auto   - Calculates boundaries based on active content packs and MaxPlayerLevel
+#     Values:      Auto   - Calculates boundaries based on the enabled expansions and MaxPlayerLevel
 #                  Custom - Uses Progression.ClassicEnd and Progression.TbcEnd
 #     Default:     Auto
 #
@@ -40,6 +40,37 @@ CoAContentScaling.Progression.ClassicEnd = 0
 #     Default:     0
 #
 CoAContentScaling.Progression.TbcEnd = 0
+
+#
+# CoAContentScaling.TBC.Enable
+#     Description: Place The Burning Crusade content in the progression layout. Which maps belong
+#                  to it comes from the expansion Map.dbc names for them.
+#                  When enabled, TBC content occupies its layout level band, and the
+#                  progression layout is rebuilt: at MaxPlayerLevel 60 with
+#                  CoAContentScaling.Progression.Mode = Auto, Classic is compressed to 1-45
+#                  and TBC takes 45-60, which moves every authored Classic level on the realm.
+#                  Set CoAContentScaling.Progression.ClassicEnd = 60 to leave Classic alone and
+#                  place TBC content at level 60 instead.
+#                  When disabled, TBC content is locked/inaccessible to normal players.
+#     Default:     0 - Disabled
+#                  1 - Enabled
+#
+CoAContentScaling.TBC.Enable = 0
+
+#
+# CoAContentScaling.WotLK.Enable
+#     Description: Place Wrath of the Lich King content in the progression layout.
+#                  When enabled, WotLK content occupies its layout level band, and the
+#                  progression layout is rebuilt: at MaxPlayerLevel 60 with
+#                  CoAContentScaling.Progression.Mode = Auto and CoAContentScaling.TBC.Enable = 1,
+#                  the three eras divide the realm as Classic 1-45, TBC 45-55, WotLK 55-60.
+#                  Set CoAContentScaling.Progression.ClassicEnd and .TbcEnd with
+#                  Progression.Mode = Custom to place the boundaries yourself.
+#                  When disabled, WotLK content is locked/inaccessible to normal players.
+#     Default:     0 - Disabled
+#                  1 - Enabled
+#
+CoAContentScaling.WotLK.Enable = 0
 
 #
 # CoAContentScaling.AuthenticMaps
@@ -207,25 +238,6 @@ CoAContentScaling.PublishAuraAmounts = 1
 #                  0 - Disabled
 #
 CoAContentScaling.ScaleEnchantments = 1
-
-#
-# CoAContentScaling.LFG.DefaultMode
-#     Description: Default composition mode for Dungeon Finder queues.
-#     Values:      Matchmaking  - Standard queue, waits for real players to fill all roles
-#                  BotFill      - Auto-fills empty slots with intelligent playerbots
-#                  CurrentParty - Bypasses matchmaking, queues immediately with current group or solo
-#     Default:     Matchmaking
-#
-CoAContentScaling.LFG.DefaultMode = Matchmaking
-
-#
-# CoAContentScaling.LFG.DefaultChallengeSize
-#     Description: Default challenge scaling size for Dungeon Finder queues.
-#     Values:      0      - Adaptive (scales dynamically to actual number of players)
-#                  1..40  - Fixed challenge target size
-#     Default:     0
-#
-CoAContentScaling.LFG.DefaultChallengeSize = 0
 
 #
 # CoAContentScaling.Debug

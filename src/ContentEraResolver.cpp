@@ -1,120 +1,131 @@
 /*
  * CoA Universal Content Scaling
- * ContentPackRegistry: Implementation of registry and hierarchical era resolution.
+ * ContentEraResolver: Implementation of hierarchical era resolution.
  */
 
-#include "ContentPackRegistry.h"
-#include "GeneratedContentCensus.h"
+#include "ContentEraResolver.h"
+#include "DBCStores.h"
 #include "InstanceProfile.h"
 #include "Log.h"
 #include <algorithm>
+#include <array>
 
-ContentPackRegistry* ContentPackRegistry::Instance()
+namespace
 {
-    static ContentPackRegistry instance;
+    constexpr uint32 OUTLAND_MAP = 530;
+
+    // Zones on the Outland map written for levels 1 to 20: Eversong Woods, Ghostlands, Silvermoon
+    // City, Azuremyst Isle, Bloodmyst Isle and The Exodar.
+    constexpr std::array<uint32, 6> ClassicZonesOnOutland = { 3430, 3433, 3487, 3524, 3525, 3557 };
+
+    ContentEra EraOfExpansion(uint8 expansion)
+    {
+        switch (expansion)
+        {
+            case 0:  return ContentEra::Classic;
+            case 1:  return ContentEra::TBC;
+            default: return ContentEra::WotLK;
+        }
+    }
+}
+
+ContentEraResolver* ContentEraResolver::Instance()
+{
+    static ContentEraResolver instance;
     return &instance;
 }
 
-void ContentPackRegistry::Finalize()
+void ContentEraResolver::LoadClientData()
+{
+    if (_finalized)
+        return;
+
+    for (MapEntry const* map : sMapStore)
+        if (map)
+            RegisterMapExpansion(map->MapID, static_cast<uint8>(map->Expansion()));
+
+    for (AreaTableEntry const* area : sAreaTableStore)
+    {
+        if (!area)
+            continue;
+
+        RegisterAreaMap(area->ID, area->mapid);
+
+        uint32 const zone = area->zone ? area->zone : area->ID;
+        if (area->mapid == OUTLAND_MAP &&
+            std::find(ClassicZonesOnOutland.begin(), ClassicZonesOnOutland.end(), zone) != ClassicZonesOnOutland.end())
+            RegisterClassicArea(area->ID);
+    }
+
+    LOG_INFO("server.loading", "ContentEraResolver: {} map expansions, {} area maps and {} Classic areas on Outland",
+             uint32(_mapExpansions.size()), uint32(_areaMaps.size()), uint32(_classicAreas.size()));
+}
+
+void ContentEraResolver::Finalize()
 {
     _finalized = true;
-    LOG_INFO("server.loading", "ContentPackRegistry: Finalized with {} active content packs",
-             uint32(_packs.size()));
 }
 
-void ContentPackRegistry::RegisterPack(std::shared_ptr<IContentPack> pack)
+void ContentEraResolver::RegisterMapExpansion(uint32 mapId, uint8 expansion)
 {
-    if (!pack)
-        return;
-
-    if (_finalized)
-    {
-        LOG_ERROR("module.coa_content_scaling",
-                  "ContentPackRegistry::RegisterPack: Attempted to register pack '{}' after registry was finalized! Restart required.",
-                  pack->GetName());
-        return;
-    }
-
-    UnregisterPack(pack->GetEra());
-    _packs.push_back(pack);
+    _mapExpansions[mapId] = EraOfExpansion(expansion);
 }
 
-void ContentPackRegistry::UnregisterPack(ContentEra era)
+void ContentEraResolver::RegisterAreaMap(uint32 areaId, uint32 mapId)
 {
-    if (_finalized)
-    {
-        LOG_ERROR("module.coa_content_scaling",
-                  "ContentPackRegistry::UnregisterPack: Attempted to unregister era '{}' after registry was finalized! Restart required.",
-                  ContentEraToString(era));
-        return;
-    }
-
-    _packs.erase(
-        std::remove_if(_packs.begin(), _packs.end(),
-            [era](std::shared_ptr<IContentPack> const& p) { return p->GetEra() == era; }),
-        _packs.end());
+    _areaMaps[areaId] = mapId;
 }
 
-IContentPack const* ContentPackRegistry::GetPack(ContentEra era) const
+void ContentEraResolver::RegisterClassicArea(uint32 areaId)
 {
-    for (auto const& pack : _packs)
-        if (pack->GetEra() == era)
-            return pack.get();
-    return nullptr;
+    _classicAreas.insert(areaId);
 }
 
-bool ContentPackRegistry::HasPack(ContentEra era) const
-{
-    return GetPack(era) != nullptr;
-}
-
-void ContentPackRegistry::RegisterMapOverride(uint32 mapId, ContentEra era)
+void ContentEraResolver::RegisterMapOverride(uint32 mapId, ContentEra era)
 {
     _mapOverrides[mapId] = era;
 }
 
-void ContentPackRegistry::RegisterAreaOverride(uint32 areaId, ContentEra era)
+void ContentEraResolver::RegisterAreaOverride(uint32 areaId, ContentEra era)
 {
     _areaOverrides[areaId] = era;
 }
 
-void ContentPackRegistry::RegisterCreatureOverride(uint32 entry, ContentEra era)
+void ContentEraResolver::RegisterCreatureOverride(uint32 entry, ContentEra era)
 {
     _creatureOverrides[entry] = era;
 }
 
-void ContentPackRegistry::RegisterQuestOverride(uint32 questId, ContentEra era)
+void ContentEraResolver::RegisterQuestOverride(uint32 questId, ContentEra era)
 {
     _questOverrides[questId] = era;
 }
 
-void ContentPackRegistry::RegisterItemOverride(uint32 itemId, ContentEra era)
+void ContentEraResolver::RegisterItemOverride(uint32 itemId, ContentEra era)
 {
     _itemOverrides[itemId] = era;
 }
 
-EraResolutionResult ContentPackRegistry::ResolveEraDetailsForMap(uint32 mapId, uint8 authoredExpansion) const
+EraResolutionResult ContentEraResolver::ResolveEraDetailsForMap(uint32 mapId, uint8 authoredExpansion) const
 {
     // 1. Explicit map override
     auto it = _mapOverrides.find(mapId);
     if (it != _mapOverrides.end())
         return EraResolutionResult{it->second, EraResolutionSource::ExplicitOverride, 1.0f};
 
-    // 2. Query registered content packs
-    for (auto const& pack : _packs)
-    {
-        if (pack->HandlesMap(mapId))
-            return EraResolutionResult{pack->GetEra(), EraResolutionSource::ContentPack, 1.0f};
-    }
-
-    // 3. InstanceProfile registry
+    // 2. InstanceProfile registry, which also knows the maps whose era depends on the difficulty
     if (auto const era = sInstanceProfileRegistry->GetEraForMap(mapId))
         return EraResolutionResult{*era, EraResolutionSource::InstanceProfile, 1.0f};
+
+    // 3. The expansion the client data names for the map
+    auto const expansion = _mapExpansions.find(mapId);
+    if (expansion != _mapExpansions.end())
+        return EraResolutionResult{expansion->second, EraResolutionSource::MapExpansion, 1.0f};
 
     // Canonical open-world continents
     if (mapId == 0 || mapId == 1) // Eastern Kingdoms, Kalimdor
         return EraResolutionResult{ContentEra::Classic, EraResolutionSource::InstanceProfile, 1.0f};
-    if (mapId == 530) // Outland
+    if (mapId == OUTLAND_MAP)
         return EraResolutionResult{ContentEra::TBC, EraResolutionSource::InstanceProfile, 1.0f};
     if (mapId == 571) // Northrend
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::InstanceProfile, 1.0f};
@@ -129,7 +140,7 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForMap(uint32 mapId, u
     return EraResolutionResult{ContentEra::Classic, EraResolutionSource::SafeFallback, 0.70f};
 }
 
-EraResolutionResult ContentPackRegistry::ResolveEraDetailsForArea(uint32 areaId, uint32 mapId, uint8 authoredExpansion) const
+EraResolutionResult ContentEraResolver::ResolveEraDetailsForArea(uint32 areaId, uint32 mapId, uint8 authoredExpansion) const
 {
     // 1. Explicit area override
     auto it = _areaOverrides.find(areaId);
@@ -140,21 +151,21 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForArea(uint32 areaId,
     if (mapOverride != _mapOverrides.end())
         return EraResolutionResult{mapOverride->second, EraResolutionSource::ExplicitOverride, 1.0f};
 
-    if ((mapId == 530 || mapId == MAP_UNSPECIFIED) && IsGeneratedStartingArea(areaId))
+    if ((mapId == OUTLAND_MAP || mapId == MAP_UNSPECIFIED) && IsClassicArea(areaId))
         return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
 
-    // 2. Query registered content packs
-    for (auto const& pack : _packs)
+    // 2. Defer to map resolution, through the area's own map when none is given
+    if (mapId == MAP_UNSPECIFIED)
     {
-        if (pack->HandlesArea(areaId))
-            return EraResolutionResult{pack->GetEra(), EraResolutionSource::ContentPack, 1.0f};
+        auto const areaMap = _areaMaps.find(areaId);
+        if (areaMap != _areaMaps.end())
+            mapId = areaMap->second;
     }
 
-    // 3. Defer to map resolution if mapId is provided
     if (mapId != MAP_UNSPECIFIED)
         return ResolveEraDetailsForMap(mapId, authoredExpansion);
 
-    // 4. Authored expansion metadata
+    // 3. Authored expansion metadata
     if (authoredExpansion == 2)
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredExpansion, 0.95f};
     if (authoredExpansion == 1)
@@ -163,8 +174,8 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForArea(uint32 areaId,
     return EraResolutionResult{ContentEra::Classic, EraResolutionSource::SafeFallback, 0.70f};
 }
 
-EraResolutionResult ContentPackRegistry::ResolveEraDetailsForCreature(uint32 creatureEntry, uint32 mapId, uint32 areaId,
-                                                                      uint8 authoredExpansion, uint8 authoredLevel) const
+EraResolutionResult ContentEraResolver::ResolveEraDetailsForCreature(uint32 creatureEntry, uint32 mapId, uint32 areaId,
+                                                                     uint8 authoredExpansion, uint8 authoredLevel) const
 {
     // Priority 1: Explicit creature entry override
     auto it = _creatureOverrides.find(creatureEntry);
@@ -186,48 +197,34 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForCreature(uint32 cre
             return EraResolutionResult{mapOverride->second, EraResolutionSource::ExplicitOverride, 1.0f};
     }
 
-    if (mapId == 530)
+    if (mapId == OUTLAND_MAP)
     {
-        if (IsGeneratedStartingArea(areaId))
+        if (IsClassicArea(areaId))
             return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
         if (areaId > 0)
             return ResolveEraDetailsForArea(areaId, mapId, authoredExpansion);
     }
 
-    // Priority 2.5: Placement-Aware Generated Creature Census Profile
-    if (mapId != MAP_UNSPECIFIED)
-    {
-        if (auto const* gc = FindGeneratedCreaturePlacement(creatureEntry, mapId))
-            return EraResolutionResult{gc->era, EraResolutionSource::ContentCensus, static_cast<float>(gc->confidence) / 100.0f};
-    }
-
-    // Priority 3: Explicit instance/map profile
+    // Priority 3: Instance profile or map expansion
     // If creature is placed on a map with clear era ownership, map ownership takes precedence over level
     if (mapId != MAP_UNSPECIFIED)
     {
         EraResolutionResult const mapRes = ResolveEraDetailsForMap(mapId, authoredExpansion);
         if (mapRes.source == EraResolutionSource::ExplicitOverride ||
-            mapRes.source == EraResolutionSource::ContentPack ||
+            mapRes.source == EraResolutionSource::MapExpansion ||
             mapRes.source == EraResolutionSource::InstanceProfile)
         {
             return EraResolutionResult{mapRes.era, EraResolutionSource::InstanceProfile, 1.0f};
         }
     }
 
-    // Priority 4: Registered content pack ownership
-    for (auto const& pack : _packs)
-    {
-        if (pack->HandlesCreature(creatureEntry))
-            return EraResolutionResult{pack->GetEra(), EraResolutionSource::ContentPack, 1.0f};
-    }
-
-    // Priority 5: Authored expansion metadata (creature_template.exp)
+    // Priority 4: Authored expansion metadata (creature_template.exp)
     if (authoredExpansion == 2)
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredExpansion, 0.95f};
     if (authoredExpansion == 1)
         return EraResolutionResult{ContentEra::TBC, EraResolutionSource::AuthoredExpansion, 0.95f};
 
-    // Priority 6: Zone/sort metadata
+    // Priority 5: Zone/sort metadata
     if (areaId > 0)
     {
         EraResolutionResult const areaRes = ResolveEraDetailsForArea(areaId, mapId, authoredExpansion);
@@ -235,23 +232,19 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForCreature(uint32 cre
             return EraResolutionResult{areaRes.era, EraResolutionSource::ZoneSortMetadata, 0.85f};
     }
 
-    // Priority 7: Authored level heuristic — STRICTLY LAST RESORT
+    // Priority 6: Authored level heuristic — STRICTLY LAST RESORT
     // Notice: Classic level 60 creatures on open world do NOT get promoted to TBC.
     if (authoredLevel >= 71)
-    {
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredLevelHeuristic, 0.60f};
-    }
     if (authoredLevel >= 61)
-    {
         return EraResolutionResult{ContentEra::TBC, EraResolutionSource::AuthoredLevelHeuristic, 0.60f};
-    }
 
-    // Priority 8: Safe fallback
+    // Priority 7: Safe fallback
     return EraResolutionResult{ContentEra::Classic, EraResolutionSource::SafeFallback, 0.70f};
 }
 
-EraResolutionResult ContentPackRegistry::ResolveEraDetailsForQuest(uint32 questId, int32 zoneOrSort,
-                                                                   uint8 authoredExpansion, uint8 authoredLevel) const
+EraResolutionResult ContentEraResolver::ResolveEraDetailsForQuest(uint32 questId, int32 zoneOrSort,
+                                                                  uint8 authoredExpansion, uint8 authoredLevel) const
 {
     // Priority 1: Explicit quest override
     auto it = _questOverrides.find(questId);
@@ -264,32 +257,28 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForQuest(uint32 questI
         auto const areaOverride = _areaOverrides.find(uint32(zoneOrSort));
         if (areaOverride != _areaOverrides.end())
             return EraResolutionResult{areaOverride->second, EraResolutionSource::ExplicitAreaOverride, 1.0f};
-    }
 
-    // Priority 3: Registered content pack ownership
-    for (auto const& pack : _packs)
-    {
-        if (pack->HandlesQuest(questId))
-            return EraResolutionResult{pack->GetEra(), EraResolutionSource::ContentPack, 1.0f};
-    }
-
-    if (zoneOrSort > 0)
-    {
-        if (IsGeneratedStartingArea(uint32(zoneOrSort)))
+        if (IsClassicArea(uint32(zoneOrSort)))
             return EraResolutionResult{ContentEra::Classic, EraResolutionSource::ZoneSortMetadata, 1.0f};
     }
 
-    // Priority 2.5: Generated Quest Census Profile
-    if (auto const* gq = FindGeneratedQuestProfile(questId))
-    {
-        return EraResolutionResult{gq->era, EraResolutionSource::ContentCensus, static_cast<float>(gq->confidence) / 100.0f};
-    }
-
-    // Priority 4: Authored expansion metadata
+    // Priority 3: Authored expansion metadata
     if (authoredExpansion == 2)
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredExpansion, 0.95f};
     if (authoredExpansion == 1)
         return EraResolutionResult{ContentEra::TBC, EraResolutionSource::AuthoredExpansion, 0.95f};
+
+    // Priority 4: The map of the quest's zone
+    if (zoneOrSort > 0)
+    {
+        auto const areaMap = _areaMaps.find(uint32(zoneOrSort));
+        if (areaMap != _areaMaps.end())
+        {
+            EraResolutionResult const mapRes = ResolveEraDetailsForMap(areaMap->second);
+            if (mapRes.source != EraResolutionSource::SafeFallback)
+                return EraResolutionResult{mapRes.era, EraResolutionSource::ZoneSortMetadata, 0.95f};
+        }
+    }
 
     // Priority 5: Zone/sort metadata
     // Canonical Outland zones
@@ -317,7 +306,7 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForQuest(uint32 questI
     return EraResolutionResult{ContentEra::Classic, EraResolutionSource::SafeFallback, 0.70f};
 }
 
-EraResolutionResult ContentPackRegistry::ResolveEraDetailsForItem(uint32 itemId, uint32 itemLevel,
+EraResolutionResult ContentEraResolver::ResolveEraDetailsForItem(uint32 itemId, uint32 itemLevel,
                                                                  uint32 requiredLevel, uint8 authoredExpansion) const
 {
     // Priority 1: Explicit item override
@@ -325,20 +314,7 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForItem(uint32 itemId,
     if (it != _itemOverrides.end())
         return EraResolutionResult{it->second, EraResolutionSource::ExplicitOverride, 1.0f};
 
-    // Priority 2: Registered content pack ownership
-    for (auto const& pack : _packs)
-    {
-        if (pack->HandlesItem(itemId))
-            return EraResolutionResult{pack->GetEra(), EraResolutionSource::ContentPack, 1.0f};
-    }
-
-    // Priority 2.5: Generated Item Source Profile
-    if (auto const* gi = FindGeneratedItemProfile(itemId))
-    {
-        return EraResolutionResult{gi->era, EraResolutionSource::InstanceProfile, 0.95f};
-    }
-
-    // Priority 3: Authored expansion metadata (ItemTemplate.RequiredExpansion)
+    // Priority 2: Authored expansion metadata (ItemTemplate.RequiredExpansion)
     if (authoredExpansion == 2)
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredExpansion, 1.0f};
     if (authoredExpansion == 1)
@@ -349,48 +325,55 @@ EraResolutionResult ContentPackRegistry::ResolveEraDetailsForItem(uint32 itemId,
         return EraResolutionResult{ContentEra::Classic, EraResolutionSource::AuthoredExpansion, 1.0f};
     }
 
-    // Priority 4: Level and ilvl heuristics — LAST RESORT
-    if (requiredLevel >= 71 || itemLevel >= 150)
+    // Priority 3: Level and ilvl heuristics — LAST RESORT. The required level names the expansion
+    // first: Sunwell's level 70 items reach item level 164, above where Northrend's start.
+    if (requiredLevel >= 71)
         return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredLevelHeuristic, 0.65f};
-    if (requiredLevel >= 61 || (itemLevel > 92 && itemLevel < 150))
+    if (requiredLevel >= 61)
+        return EraResolutionResult{ContentEra::TBC, EraResolutionSource::AuthoredLevelHeuristic, 0.65f};
+    if (itemLevel >= 150)
+        return EraResolutionResult{ContentEra::WotLK, EraResolutionSource::AuthoredLevelHeuristic, 0.65f};
+    if (itemLevel > 92)
         return EraResolutionResult{ContentEra::TBC, EraResolutionSource::AuthoredLevelHeuristic, 0.65f};
 
-    // Priority 5: Safe fallback
+    // Priority 4: Safe fallback
     return EraResolutionResult{ContentEra::Classic, EraResolutionSource::SafeFallback, 0.70f};
 }
 
-ContentEra ContentPackRegistry::ResolveEraForMap(uint32 mapId, uint8 authoredExpansion) const
+ContentEra ContentEraResolver::ResolveEraForMap(uint32 mapId, uint8 authoredExpansion) const
 {
     return ResolveEraDetailsForMap(mapId, authoredExpansion).era;
 }
 
-ContentEra ContentPackRegistry::ResolveEraForArea(uint32 areaId, uint32 mapId, uint8 authoredExpansion) const
+ContentEra ContentEraResolver::ResolveEraForArea(uint32 areaId, uint32 mapId, uint8 authoredExpansion) const
 {
     return ResolveEraDetailsForArea(areaId, mapId, authoredExpansion).era;
 }
 
-ContentEra ContentPackRegistry::ResolveEraForCreature(uint32 creatureEntry, uint32 mapId, uint32 areaId,
+ContentEra ContentEraResolver::ResolveEraForCreature(uint32 creatureEntry, uint32 mapId, uint32 areaId,
                                                      uint8 authoredExpansion, uint8 authoredLevel) const
 {
     return ResolveEraDetailsForCreature(creatureEntry, mapId, areaId, authoredExpansion, authoredLevel).era;
 }
 
-ContentEra ContentPackRegistry::ResolveEraForQuest(uint32 questId, int32 zoneOrSort,
+ContentEra ContentEraResolver::ResolveEraForQuest(uint32 questId, int32 zoneOrSort,
                                                   uint8 authoredExpansion, uint8 authoredLevel) const
 {
     return ResolveEraDetailsForQuest(questId, zoneOrSort, authoredExpansion, authoredLevel).era;
 }
 
-ContentEra ContentPackRegistry::ResolveEraForItem(uint32 itemId, uint32 itemLevel,
+ContentEra ContentEraResolver::ResolveEraForItem(uint32 itemId, uint32 itemLevel,
                                                  uint32 requiredLevel, uint8 authoredExpansion) const
 {
     return ResolveEraDetailsForItem(itemId, itemLevel, requiredLevel, authoredExpansion).era;
 }
 
-void ContentPackRegistry::Clear()
+void ContentEraResolver::Clear()
 {
     _finalized = false;
-    _packs.clear();
+    _mapExpansions.clear();
+    _areaMaps.clear();
+    _classicAreas.clear();
     _mapOverrides.clear();
     _areaOverrides.clear();
     _creatureOverrides.clear();

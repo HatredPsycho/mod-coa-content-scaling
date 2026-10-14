@@ -4,10 +4,9 @@
  */
 
 #include "ItemBudgetScaler.h"
-#include "LocalLevelScaling.h"
-#include "ContentPackRegistry.h"
-#include "GeneratedContentCensus.h"
-#include "GeneratedCustomRanges.h"
+#include "ContentScalingHooks.h"
+#include "ContentEraResolver.h"
+#include "CustomItemRanges.h"
 #include "InstanceProfile.h"
 #include "ItemTemplate.h"
 #include "Log.h"
@@ -158,37 +157,13 @@ ItemScalingContext ItemScalingContext::Resolve(ItemTemplate const* proto)
     {
         ctx.specialFlags |= ITEM_SPECIAL_PRESERVE;
         ctx.policy = ItemScalingPolicy::PRESERVE;
-        if (auto const* prof = FindGeneratedItemProfile(proto->ItemId))
-        {
-            ctx.hasGeneratedProfile = true;
-            ctx.era = prof->era;
-            ctx.tier = prof->tier;
-            ctx.sourceMap = prof->sourceMap;
-        }
         return ctx;
     }
 
-    // 1. Retain generated source and safety metadata; resolve era through registry priorities.
-    if (auto const* prof = FindGeneratedItemProfile(proto->ItemId))
-    {
-        ctx.hasGeneratedProfile = true;
-        ctx.era = sContentPackRegistry->ResolveEraForItem(proto->ItemId, proto->ItemLevel, proto->RequiredLevel);
-        ctx.tier = prof->tier;
-        ctx.sourceMap = prof->sourceMap;
-        ctx.specialFlags = prof->specialFlags;
-        ctx.policy = static_cast<ItemScalingPolicy>(prof->policy);
-
-        return ctx;
-    }
-
-    // 2. Custom items, classified by the ranges data/content/overrides/custom_content.json names.
-    //
-    // That file called itself the authoritative source and only the census generator ever read it,
-    // which needs a database - so the runtime had nothing and preserved every custom item above
-    // 100000. On a realm whose own items outnumber the stock ones four to one that meant the pass
-    // skipped most of what players wear, the Bloodforged and Heroic versions included. The ranges
-    // are generated into a header now, so they stay in the file and the boundaries stay out of here.
-    if (GeneratedCustomRange const* range = FindGeneratedCustomRange(proto->ItemId))
+    // 1. Custom items, classified by the ranges CustomItemRanges.h names. Only the cosmetic and class
+    // ranges are preserved: on a realm whose own items outnumber the stock ones four to one, the
+    // Bloodforged and Heroic versions are most of what players wear.
+    if (CustomItemRange const* range = FindCustomItemRange(proto->ItemId))
     {
         ctx.specialFlags |= ITEM_SPECIAL_CUSTOM;
         ctx.sourceMap = 0;
@@ -202,8 +177,8 @@ ItemScalingContext ItemScalingContext::Resolve(ItemTemplate const* proto)
             return ctx;
         }
     }
-    // 3. Fallback: Era resolution through registry
-    EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForItem(
+    // 2. Fallback: Era resolution through registry
+    EraResolutionResult const eraRes = sContentEraResolver->ResolveEraDetailsForItem(
         proto->ItemId, proto->ItemLevel, proto->RequiredLevel);
     ctx.era = eraRes.era;
 
@@ -456,7 +431,6 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
         return;
 
     uint32 totalTemplates = 0;
-    uint32 generatedProfilesUsed = 0;
     uint32 fallbackInferred = 0;
     uint32 preservedCustom = 0;
     uint32 specialReview = 0;
@@ -476,8 +450,6 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
         else
             CollectPriceSample(proto);
 
-        if (ctx.hasGeneratedProfile)
-            ++generatedProfilesUsed;
         if (ctx.fallbackTierInference)
             ++fallbackInferred;
         if (ctx.policy == ItemScalingPolicy::PRESERVE)
@@ -508,7 +480,6 @@ void ItemBudgetScaler::ScaleAllItems(ProgressionLayout const& layout)
 
     LOG_INFO("server.loading", ">> UniversalContentScaling: Item scaling summary:");
     LOG_INFO("server.loading", "   Total templates: {}", totalTemplates);
-    LOG_INFO("server.loading", "   Generated profiles: {}", generatedProfilesUsed);
     LOG_INFO("server.loading", "   Fallback inferred: {}", fallbackInferred);
     LOG_INFO("server.loading", "   Preserved custom: {}", preservedCustom);
     LOG_INFO("server.loading", "   Special-review: {}", specialReview);

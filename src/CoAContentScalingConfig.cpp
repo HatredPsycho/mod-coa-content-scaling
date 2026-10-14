@@ -87,28 +87,4 @@ namespace CoAContentScalingConfig
 
         return SoloAssistMode::NONE;
     }
-
-    lfg::LfgCompositionMode ParseLfgCompositionMode(std::string_view raw)
-    {
-        std::string s = Trim(raw);
-        std::string lower = s;
-        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
-
-        if (lower == "botfill" || lower == "bots" || lower == "bot" || lower == "fill")
-            return lfg::LfgCompositionMode::BOT_FILL;
-
-        if (lower == "currentparty" || lower == "party" || lower == "premade" || lower == "solo")
-            return lfg::LfgCompositionMode::CURRENT_PARTY;
-
-        if (lower == "matchmaking" || lower == "match" || lower == "standard" || lower == "normal")
-            return lfg::LfgCompositionMode::MATCHMAKING;
-
-        if (!lower.empty())
-        {
-            LOG_WARN("module.coa_content_scaling",
-                     "CoAContentScaling: Invalid LFG.DefaultMode '{}', safely falling back to 'Matchmaking'.", s);
-        }
-
-        return lfg::LfgCompositionMode::MATCHMAKING;
-    }
 }

@@ -5,10 +5,8 @@
 
 #include "ProgressionLayout.h"
 #include "ContentEra.h"
-#include "ContentPackRegistry.h"
+#include "ContentEraResolver.h"
 #include "CoAContentScalingConfig.h"
-#include "DungeonFinding/LFG.h"
-#include "GeneratedContentCensus.h"
 #include "InstanceProfile.h"
 #include "InstanceScaleContext.h"
 #include "ItemBudgetScaler.h"
@@ -230,7 +228,7 @@ TEST(ProgressionLayoutTest, ValidationFailures)
     EXPECT_FALSE(badMin.Validate(err));
 }
 
-// 5. Pack Registration Order Invariance
+// 5. Layout Construction Is Deterministic
 TEST(ProgressionLayoutTest, RegistrationOrderInvariance)
 {
     // Regardless of which pack was discovered/registered first, the resulting ProgressionLayout is identical
@@ -252,22 +250,22 @@ TEST(ProgressionLayoutTest, RegistrationOrderInvariance)
 TEST(ContentEraResolutionTest, ClassicContinentCreatureRetainsClassicAtLevel60)
 {
     // A creature on Eastern Kingdoms (map 0) or Kalimdor (map 1) at level 60 must NEVER be promoted to TBC
-    EraResolutionResult res = sContentPackRegistry->ResolveEraDetailsForCreature(
+    EraResolutionResult res = sContentEraResolver->ResolveEraDetailsForCreature(
         12345, 0 /*Eastern Kingdoms*/, 0, 0 /*Classic expansion*/, 60 /*Level 60*/);
 
     EXPECT_EQ(res.era, ContentEra::Classic);
     EXPECT_EQ(res.source, EraResolutionSource::InstanceProfile);
 
     // Explicit override takes precedence over map profile
-    sContentPackRegistry->RegisterCreatureOverride(12345, ContentEra::Custom);
-    EraResolutionResult overrideRes = sContentPackRegistry->ResolveEraDetailsForCreature(
+    sContentEraResolver->RegisterCreatureOverride(12345, ContentEra::Custom);
+    EraResolutionResult overrideRes = sContentEraResolver->ResolveEraDetailsForCreature(
         12345, 0, 0, 0, 60);
 
     EXPECT_EQ(overrideRes.era, ContentEra::Custom);
     EXPECT_EQ(overrideRes.source, EraResolutionSource::ExplicitOverride);
 
     // Clean up
-    sContentPackRegistry->Clear();
+    sContentEraResolver->Clear();
 }
 
 // 7. Monotonic Item Power Bands
@@ -444,117 +442,6 @@ TEST(EncounterLifecycleSourceHierarchyTest, PriorityAndKeyIntegrity)
     EXPECT_EQ(hasher(k1), hasher(k2));
 }
 
-// 12. LFG Queue Policy Acceptance Matrix
-TEST(LfgQueuePolicyAcceptanceMatrixTest, AcceptanceMatrixVerification)
-{
-    auto ResolvePolicy = [](lfg::LfgCompositionMode mode, uint32 challengeSize, uint8 partySize)
-    {
-        lfg::LfgQueuePolicy policy;
-        policy.compositionMode = mode;
-        policy.challengeSize = challengeSize;
-
-        switch (mode)
-        {
-            case lfg::LfgCompositionMode::MATCHMAKING:
-                policy.bypassMatchmaking = false;
-                policy.requireStandardRoles = true;
-                policy.minPlayers = 5;
-                policy.targetPlayers = 5;
-                break;
-
-            case lfg::LfgCompositionMode::BOT_FILL:
-                policy.bypassMatchmaking = false;
-                policy.requireStandardRoles = true;
-                policy.minPlayers = 5;
-                policy.targetPlayers = 5;
-                break;
-
-            case lfg::LfgCompositionMode::CURRENT_PARTY:
-                policy.bypassMatchmaking = true;
-                policy.requireStandardRoles = false;
-                policy.minPlayers = partySize;
-                policy.targetPlayers = partySize;
-                break;
-        }
-        return policy;
-    };
-
-    // Scenario 1: CURRENT_PARTY, solo, adaptive
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::CURRENT_PARTY, 0, 1);
-        EXPECT_TRUE(p.bypassMatchmaking);
-        EXPECT_FALSE(p.requireStandardRoles);
-        EXPECT_EQ(p.minPlayers, 1u);
-        EXPECT_EQ(p.targetPlayers, 1u);
-        EXPECT_EQ(p.challengeSize, 0u);
-    }
-
-    // Scenario 2: CURRENT_PARTY, solo, challenge 5
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::CURRENT_PARTY, 5, 1);
-        EXPECT_TRUE(p.bypassMatchmaking);
-        EXPECT_EQ(p.minPlayers, 1u);
-        EXPECT_EQ(p.targetPlayers, 1u);
-        EXPECT_EQ(p.challengeSize, 5u);
-    }
-
-    // Scenario 3: CURRENT_PARTY, duo, adaptive
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::CURRENT_PARTY, 0, 2);
-        EXPECT_TRUE(p.bypassMatchmaking);
-        EXPECT_EQ(p.minPlayers, 2u);
-        EXPECT_EQ(p.targetPlayers, 2u);
-        EXPECT_EQ(p.challengeSize, 0u);
-    }
-
-    // Scenario 4: CURRENT_PARTY, duo, challenge 1
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::CURRENT_PARTY, 1, 2);
-        EXPECT_TRUE(p.bypassMatchmaking);
-        EXPECT_EQ(p.minPlayers, 2u);
-        EXPECT_EQ(p.targetPlayers, 2u);
-        EXPECT_EQ(p.challengeSize, 1u);
-    }
-
-    // Scenario 5: CURRENT_PARTY, duo, challenge 5
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::CURRENT_PARTY, 5, 2);
-        EXPECT_TRUE(p.bypassMatchmaking);
-        EXPECT_EQ(p.minPlayers, 2u);
-        EXPECT_EQ(p.targetPlayers, 2u);
-        EXPECT_EQ(p.challengeSize, 5u);
-    }
-
-    // Scenario 6: CURRENT_PARTY, 4-man, challenge 10
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::CURRENT_PARTY, 10, 4);
-        EXPECT_TRUE(p.bypassMatchmaking);
-        EXPECT_EQ(p.minPlayers, 4u);
-        EXPECT_EQ(p.targetPlayers, 4u);
-        EXPECT_EQ(p.challengeSize, 10u);
-    }
-
-    // Scenario 7: MATCHMAKING, solo, adaptive
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::MATCHMAKING, 0, 1);
-        EXPECT_FALSE(p.bypassMatchmaking);
-        EXPECT_TRUE(p.requireStandardRoles);
-        EXPECT_EQ(p.minPlayers, 5u);
-        EXPECT_EQ(p.targetPlayers, 5u);
-        EXPECT_EQ(p.challengeSize, 0u);
-    }
-
-    // Scenario 8: BOT_FILL, solo, adaptive
-    {
-        auto p = ResolvePolicy(lfg::LfgCompositionMode::BOT_FILL, 0, 1);
-        EXPECT_FALSE(p.bypassMatchmaking);
-        EXPECT_TRUE(p.requireStandardRoles);
-        EXPECT_EQ(p.minPlayers, 5u);
-        EXPECT_EQ(p.targetPlayers, 5u);
-        EXPECT_EQ(p.challengeSize, 0u);
-    }
-}
-
 // =============================================================================
 // Round 2.2: Config Canonical Keys and Centralized Parser Tests
 // =============================================================================
@@ -572,8 +459,8 @@ TEST(CoAConfigTest, CanonicalKeysConstantsMatch)
     EXPECT_STREQ(CoAContentScalingConfigKeys::SoloAssistMode, "CoAContentScaling.SoloAssist.Mode");
     EXPECT_STREQ(CoAContentScalingConfigKeys::RewardsScaleLootCount, "CoAContentScaling.Rewards.ScaleLootCount");
     EXPECT_STREQ(CoAContentScalingConfigKeys::ScaleItems, "CoAContentScaling.ScaleItems");
-    EXPECT_STREQ(CoAContentScalingConfigKeys::LfgDefaultMode, "CoAContentScaling.LFG.DefaultMode");
-    EXPECT_STREQ(CoAContentScalingConfigKeys::LfgDefaultChallengeSize, "CoAContentScaling.LFG.DefaultChallengeSize");
+    EXPECT_STREQ(CoAContentScalingConfigKeys::TbcEnable, "CoAContentScaling.TBC.Enable");
+    EXPECT_STREQ(CoAContentScalingConfigKeys::WotlkEnable, "CoAContentScaling.WotLK.Enable");
     EXPECT_STREQ(CoAContentScalingConfigKeys::Debug, "CoAContentScaling.Debug");
 }
 
@@ -629,447 +516,103 @@ TEST(CoAConfigTest, ParseMapList)
     EXPECT_EQ(mixed, (std::unordered_set<uint32>{ 229, 230 }));
 }
 
-TEST(CoAConfigTest, ParseLfgCompositionMode)
-{
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("Matchmaking"), lfg::LfgCompositionMode::MATCHMAKING);
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("matchmaking"), lfg::LfgCompositionMode::MATCHMAKING);
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("BotFill"), lfg::LfgCompositionMode::BOT_FILL);
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("bots"), lfg::LfgCompositionMode::BOT_FILL);
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("CurrentParty"), lfg::LfgCompositionMode::CURRENT_PARTY);
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("party"), lfg::LfgCompositionMode::CURRENT_PARTY);
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("solo"), lfg::LfgCompositionMode::CURRENT_PARTY);
-
-    // Invalid fallback
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode("invalid"), lfg::LfgCompositionMode::MATCHMAKING);
-    EXPECT_EQ(CoAContentScalingConfig::ParseLfgCompositionMode(""), lfg::LfgCompositionMode::MATCHMAKING);
-}
-
 // =============================================================================
-// Round 2.2: Pending Policy Atomic Consume-Once and TTL Simulation Tests
+// Round 3: Era Sources, Instance Profiles & Calibration Tests
 // =============================================================================
 
-struct TestPendingPolicy
+TEST(ContentEraResolverTest, MapExpansionDecidesTheEraOfAnUnprofiledMap)
 {
-    uint32 mapId{0};
-    uint64 groupGuid{0};
-    uint32 challengeSize{0};
-    lfg::LfgCompositionMode compositionMode{lfg::LfgCompositionMode::MATCHMAKING};
-    uint64 generation{0};
-    uint32 createdAt{0};
-};
+    sContentEraResolver->Clear();
+    sContentEraResolver->RegisterMapExpansion(9001, 0);
+    sContentEraResolver->RegisterMapExpansion(9002, 1);
+    sContentEraResolver->RegisterMapExpansion(9003, 2);
 
-class PendingPolicySimulator
-{
-public:
-    void RegisterProposal(uint32 mapId, uint64 groupGuid, std::vector<uint64> const& playerGuids,
-                          uint32 challengeSize, lfg::LfgCompositionMode compMode, uint32 currentTime)
-    {
-        ++_generation;
-        TestPendingPolicy p;
-        p.mapId = mapId;
-        p.groupGuid = groupGuid;
-        p.challengeSize = challengeSize;
-        p.compositionMode = compMode;
-        p.generation = _generation;
-        p.createdAt = currentTime;
+    EraResolutionResult const classic = sContentEraResolver->ResolveEraDetailsForMap(9001);
+    EXPECT_EQ(classic.era, ContentEra::Classic);
+    EXPECT_EQ(classic.source, EraResolutionSource::MapExpansion);
+    EXPECT_EQ(sContentEraResolver->ResolveEraForMap(9002), ContentEra::TBC);
+    EXPECT_EQ(sContentEraResolver->ResolveEraForMap(9003), ContentEra::WotLK);
 
-        if (groupGuid)
-            _groupPolicies[groupGuid] = p;
+    EraResolutionResult const creature = sContentEraResolver->ResolveEraDetailsForCreature(1, 9003, 0, 0, 10);
+    EXPECT_EQ(creature.era, ContentEra::WotLK);
+    EXPECT_EQ(creature.source, EraResolutionSource::InstanceProfile);
 
-        for (uint64 pguid : playerGuids)
-            _playerPolicies[pguid] = p;
-    }
+    sContentEraResolver->RegisterMapOverride(9003, ContentEra::Custom);
+    EXPECT_EQ(sContentEraResolver->ResolveEraForMap(9003), ContentEra::Custom);
 
-    std::optional<TestPendingPolicy> Consume(uint32 mapId, uint64 groupGuid, uint64 playerGuid, uint32 currentTime)
-    {
-        PurgeExpired(currentTime);
-
-        TestPendingPolicy policy;
-        bool found = false;
-
-        if (groupGuid)
-        {
-            auto it = _groupPolicies.find(groupGuid);
-            if (it != _groupPolicies.end() && it->second.mapId == mapId)
-            {
-                policy = it->second;
-                found = true;
-            }
-        }
-
-        if (!found && playerGuid)
-        {
-            auto it = _playerPolicies.find(playerGuid);
-            if (it != _playerPolicies.end() && it->second.mapId == mapId)
-            {
-                policy = it->second;
-                found = true;
-            }
-        }
-
-        if (!found)
-            return std::nullopt;
-
-        uint64 const targetGen = policy.generation;
-
-        if (policy.groupGuid)
-        {
-            auto git = _groupPolicies.find(policy.groupGuid);
-            if (git != _groupPolicies.end() && git->second.generation == targetGen)
-                _groupPolicies.erase(git);
-        }
-
-        for (auto it = _playerPolicies.begin(); it != _playerPolicies.end();)
-        {
-            if (it->second.generation == targetGen)
-                it = _playerPolicies.erase(it);
-            else
-                ++it;
-        }
-
-        return policy;
-    }
-
-    void OnPlayerLogout(uint64 playerGuid, uint64 leaderGuid, uint32 groupSize)
-    {
-        auto it = _playerPolicies.find(playerGuid);
-        if (it != _playerPolicies.end())
-        {
-            uint64 const gen = it->second.generation;
-            uint64 const grpGuid = it->second.groupGuid;
-            _playerPolicies.erase(it);
-
-            if (grpGuid && (playerGuid == leaderGuid || groupSize <= 1))
-            {
-                auto git = _groupPolicies.find(grpGuid);
-                if (git != _groupPolicies.end() && git->second.generation == gen)
-                    _groupPolicies.erase(git);
-            }
-        }
-    }
-
-    void PurgeExpired(uint32 currentTime)
-    {
-        constexpr uint32 TTL = 300; // 5 min
-        for (auto it = _groupPolicies.begin(); it != _groupPolicies.end();)
-        {
-            if (currentTime > it->second.createdAt && (currentTime - it->second.createdAt) > TTL)
-                it = _groupPolicies.erase(it);
-            else
-                ++it;
-        }
-
-        for (auto it = _playerPolicies.begin(); it != _playerPolicies.end();)
-        {
-            if (currentTime > it->second.createdAt && (currentTime - it->second.createdAt) > TTL)
-                it = _playerPolicies.erase(it);
-            else
-                ++it;
-        }
-    }
-
-    size_t GroupCount() const { return _groupPolicies.size(); }
-    size_t PlayerCount() const { return _playerPolicies.size(); }
-
-private:
-    uint64 _generation{0};
-    std::unordered_map<uint64, TestPendingPolicy> _groupPolicies;
-    std::unordered_map<uint64, TestPendingPolicy> _playerPolicies;
-};
-
-TEST(PendingPolicyTest, ConsumeOnceAndEraseAllAliases)
-{
-    PendingPolicySimulator sim;
-    sim.RegisterProposal(33, 100, { 1, 2, 3, 4, 5 }, 10, lfg::LfgCompositionMode::CURRENT_PARTY, 1000);
-
-    EXPECT_EQ(sim.GroupCount(), 1u);
-    EXPECT_EQ(sim.PlayerCount(), 5u);
-
-    // First entry: Successfully consumed
-    auto consumed = sim.Consume(33, 100, 1, 1010);
-    ASSERT_TRUE(consumed.has_value());
-    EXPECT_EQ(consumed->challengeSize, 10u);
-    EXPECT_EQ(consumed->mapId, 33u);
-
-    // Group entry and ALL 5 player aliases sharing generation erased atomically
-    EXPECT_EQ(sim.GroupCount(), 0u);
-    EXPECT_EQ(sim.PlayerCount(), 0u);
-
-    // Re-entry / subsequent check: MUST NOT inherit old challenge
-    auto secondEntry = sim.Consume(33, 100, 1, 1020);
-    EXPECT_FALSE(secondEntry.has_value());
-
-    auto memberEntry = sim.Consume(33, 100, 2, 1020);
-    EXPECT_FALSE(memberEntry.has_value());
+    sContentEraResolver->Clear();
+    EXPECT_EQ(sContentEraResolver->ResolveEraDetailsForMap(9002).source, EraResolutionSource::SafeFallback);
 }
 
-TEST(PendingPolicyTest, TtlExpiration)
+TEST(ContentEraResolverTest, QuestZoneFollowsTheMapOfItsArea)
 {
-    PendingPolicySimulator sim;
-    sim.RegisterProposal(43, 200, { 10 }, 5, lfg::LfgCompositionMode::CURRENT_PARTY, 1000);
+    sContentEraResolver->Clear();
+    sContentEraResolver->RegisterMapExpansion(9002, 1);
+    sContentEraResolver->RegisterAreaMap(9100, 9002);
 
-    // Within TTL (150s elapsed)
-    sim.PurgeExpired(1150);
-    EXPECT_EQ(sim.GroupCount(), 1u);
+    EraResolutionResult const quest = sContentEraResolver->ResolveEraDetailsForQuest(1, 9100, 0, 10);
+    EXPECT_EQ(quest.era, ContentEra::TBC);
+    EXPECT_EQ(quest.source, EraResolutionSource::ZoneSortMetadata);
+    EXPECT_EQ(sContentEraResolver->ResolveEraForArea(9100), ContentEra::TBC);
 
-    // Past 300s TTL (301s elapsed)
-    sim.PurgeExpired(1301);
-    EXPECT_EQ(sim.GroupCount(), 0u);
-    EXPECT_EQ(sim.PlayerCount(), 0u);
+    EraResolutionResult const sortOnly = sContentEraResolver->ResolveEraDetailsForQuest(2, -101, 0, 75);
+    EXPECT_EQ(sortOnly.era, ContentEra::WotLK);
+    EXPECT_EQ(sortOnly.source, EraResolutionSource::AuthoredLevelHeuristic);
 
-    auto result = sim.Consume(43, 200, 10, 1302);
-    EXPECT_FALSE(result.has_value());
+    sContentEraResolver->Clear();
 }
 
-TEST(PendingPolicyTest, LeaderLogoutCleansGroupPolicy)
+TEST(ContentEraResolverTest, ClassicAreasOnOutlandStayClassic)
 {
-    PendingPolicySimulator sim;
-    sim.RegisterProposal(33, 300, { 20, 21, 22 }, 3, lfg::LfgCompositionMode::CURRENT_PARTY, 1000);
+    constexpr uint32 eversongWoods = 3430;
+    constexpr uint32 hellfirePeninsula = 3483;
 
-    EXPECT_EQ(sim.GroupCount(), 1u);
-    EXPECT_EQ(sim.PlayerCount(), 3u);
+    sContentEraResolver->Clear();
+    sContentEraResolver->RegisterMapExpansion(530, 1);
+    sContentEraResolver->RegisterAreaMap(eversongWoods, 530);
+    sContentEraResolver->RegisterAreaMap(hellfirePeninsula, 530);
+    sContentEraResolver->RegisterClassicArea(eversongWoods);
 
-    // Non-leader logs out (leader is 20, member 21 logs out)
-    sim.OnPlayerLogout(21, 20, 3);
-    EXPECT_EQ(sim.PlayerCount(), 2u);
-    EXPECT_EQ(sim.GroupCount(), 1u); // Group policy remains
+    EXPECT_EQ(sContentEraResolver->ResolveEraForCreature(1, 530, eversongWoods, 1, 5), ContentEra::Classic);
+    EXPECT_EQ(sContentEraResolver->ResolveEraForQuest(1, eversongWoods, 0, 5), ContentEra::Classic);
+    EXPECT_EQ(sContentEraResolver->ResolveEraForArea(eversongWoods, 530), ContentEra::Classic);
 
-    // Leader 20 logs out
-    sim.OnPlayerLogout(20, 20, 2);
-    EXPECT_EQ(sim.PlayerCount(), 1u);
-    EXPECT_EQ(sim.GroupCount(), 0u); // Group policy purged
+    EXPECT_EQ(sContentEraResolver->ResolveEraForCreature(1, 530, hellfirePeninsula, 1, 60), ContentEra::TBC);
+    EXPECT_EQ(sContentEraResolver->ResolveEraForQuest(2, hellfirePeninsula, 0, 60), ContentEra::TBC);
+
+    sContentEraResolver->Clear();
 }
 
-// =============================================================================
-// Round 2.2: Multi-Role Bot Solver Tests
-// =============================================================================
-
-struct SolverMember
+TEST(InstanceProfileRegistryTest, AuthoredRaidTiersAndHeroicDungeons)
 {
-    uint8 roles;
-};
+    EXPECT_EQ(InstanceProfileRegistry::GetAuthoredTier(36, false), ContentTier::DUNGEON_NORMAL);
+    EXPECT_EQ(InstanceProfileRegistry::GetAuthoredTier(409, true), ContentTier::RAID_MID);
+    EXPECT_EQ(InstanceProfileRegistry::GetAuthoredTier(531, true), ContentTier::RAID_PINNACLE);
+    EXPECT_EQ(InstanceProfileRegistry::GetAuthoredTier(564, true), ContentTier::RAID_END);
+    EXPECT_EQ(InstanceProfileRegistry::GetAuthoredTier(631, true), ContentTier::RAID_PINNACLE);
+    EXPECT_EQ(InstanceProfileRegistry::GetAuthoredTier(9999, true), ContentTier::RAID_ENTRY);
+    EXPECT_TRUE(InstanceProfileRegistry::IsCustomMap(936));
+    EXPECT_FALSE(InstanceProfileRegistry::IsCustomMap(36));
 
-struct SolverResult
-{
-    bool hasTank{false};
-    bool hasHealer{false};
-    uint32 realDpsCount{0};
-    uint32 tankBotsNeeded{0};
-    uint32 healerBotsNeeded{0};
-    uint32 dpsBotsNeeded{0};
-};
-
-SolverResult SolveRoles(std::vector<SolverMember> const& members)
-{
-    SolverResult result;
-    if (members.empty() || members.size() >= 5)
-        return result;
-
-    size_t const N = members.size();
-    bool bestFound = false;
-    int bestScore = -1;
-    bool bestTank = false;
-    bool bestHealer = false;
-    uint32 bestDps = 0;
-
-    auto backtrack = [&](auto& self, size_t idx, bool curTank, bool curHealer, uint32 curDps) -> void
-    {
-        if (idx == N)
-        {
-            int score = (curTank ? 100 : 0) + (curHealer ? 50 : 0) + int(curDps);
-            if (!bestFound || score > bestScore)
-            {
-                bestScore = score;
-                bestTank = curTank;
-                bestHealer = curHealer;
-                bestDps = curDps;
-                bestFound = true;
-            }
-            return;
-        }
-
-        uint8 const availableRoles = members[idx].roles;
-
-        // Try Tank
-        if (!curTank && (availableRoles & lfg::PLAYER_ROLE_TANK))
-            self(self, idx + 1, true, curHealer, curDps);
-
-        // Try Healer
-        if (!curHealer && (availableRoles & lfg::PLAYER_ROLE_HEALER))
-            self(self, idx + 1, curTank, true, curDps);
-
-        // Try DPS
-        if (curDps < 3 && (availableRoles & lfg::PLAYER_ROLE_DAMAGE))
-            self(self, idx + 1, curTank, curHealer, curDps + 1);
-
-        // Unassigned branch
-        self(self, idx + 1, curTank, curHealer, curDps);
-    };
-
-    backtrack(backtrack, 0, false, false, 0);
-
-    result.hasTank = bestTank;
-    result.hasHealer = bestHealer;
-    result.realDpsCount = bestDps;
-
-    uint32 const availableBotSlots = static_cast<uint32>(5 - N);
-    uint32 remainingSlots = availableBotSlots;
-
-    if (!result.hasTank && remainingSlots > 0)
-    {
-        result.tankBotsNeeded = 1;
-        --remainingSlots;
-    }
-
-    if (!result.hasHealer && remainingSlots > 0)
-    {
-        result.healerBotsNeeded = 1;
-        --remainingSlots;
-    }
-
-    uint32 const missingDps = (result.realDpsCount >= 3) ? 0 : (3 - result.realDpsCount);
-    result.dpsBotsNeeded = std::min<uint32>(remainingSlots, missingDps);
-
-    return result;
-}
-
-TEST(BotRoleSolverTest, SinglePlayerMultiRole)
-{
-    // Solo player queued as Tank | Healer
-    // Must be assigned to Tank (or Healer), exactly ONE role, never both!
-    std::vector<SolverMember> members = { { lfg::PLAYER_ROLE_TANK | lfg::PLAYER_ROLE_HEALER } };
-    SolverResult res = SolveRoles(members);
-
-    EXPECT_TRUE(res.hasTank);
-    EXPECT_FALSE(res.hasHealer); // Solo player cannot be both!
-    EXPECT_EQ(res.tankBotsNeeded, 0u);
-    EXPECT_EQ(res.healerBotsNeeded, 1u); // Healer bot spawned
-    EXPECT_EQ(res.dpsBotsNeeded, 3u);    // 3 DPS bots spawned
-    EXPECT_EQ(1u + res.tankBotsNeeded + res.healerBotsNeeded + res.dpsBotsNeeded, 5u); // Total exactly 5
-}
-
-TEST(BotRoleSolverTest, FourRealDps_NeverExceedsFiveMembers)
-{
-    // 4 real DPS queued
-    // Bot slots available = 5 - 4 = 1 slot.
-    // Tank has higher priority than Healer, so add 1 Tank bot.
-    // Group must NEVER become 6 players!
-    std::vector<SolverMember> members = {
-        { lfg::PLAYER_ROLE_DAMAGE },
-        { lfg::PLAYER_ROLE_DAMAGE },
-        { lfg::PLAYER_ROLE_DAMAGE },
-        { lfg::PLAYER_ROLE_DAMAGE }
-    };
-    SolverResult res = SolveRoles(members);
-
-    EXPECT_FALSE(res.hasTank);
-    EXPECT_FALSE(res.hasHealer);
-    EXPECT_EQ(res.realDpsCount, 3u); // Capped to 3 standard dungeon DPS
-    EXPECT_EQ(res.tankBotsNeeded, 1u);
-    EXPECT_EQ(res.healerBotsNeeded, 0u); // Slots exhausted!
-    EXPECT_EQ(res.dpsBotsNeeded, 0u);
-
-    uint32 totalGroup = 4u + res.tankBotsNeeded + res.healerBotsNeeded + res.dpsBotsNeeded;
-    EXPECT_EQ(totalGroup, 5u); // Exactly 5, NOT 6!
-}
-
-TEST(BotRoleSolverTest, FullFiveRealPlayers_ZeroBotsNeeded)
-{
-    std::vector<SolverMember> members = {
-        { lfg::PLAYER_ROLE_TANK },
-        { lfg::PLAYER_ROLE_HEALER },
-        { lfg::PLAYER_ROLE_DAMAGE },
-        { lfg::PLAYER_ROLE_DAMAGE },
-        { lfg::PLAYER_ROLE_DAMAGE }
-    };
-    SolverResult res = SolveRoles(members);
-
-    EXPECT_EQ(res.tankBotsNeeded, 0u);
-    EXPECT_EQ(res.healerBotsNeeded, 0u);
-    EXPECT_EQ(res.dpsBotsNeeded, 0u);
-}
-
-TEST(BotRoleSolverTest, FlexibleRolesThreeMembers)
-{
-    // Player 1: Tank | DPS
-    // Player 2: Healer | DPS
-    // Player 3: DPS
-    std::vector<SolverMember> members = {
-        { lfg::PLAYER_ROLE_TANK | lfg::PLAYER_ROLE_DAMAGE },
-        { lfg::PLAYER_ROLE_HEALER | lfg::PLAYER_ROLE_DAMAGE },
-        { lfg::PLAYER_ROLE_DAMAGE }
-    };
-    SolverResult res = SolveRoles(members);
-
-    EXPECT_TRUE(res.hasTank);
-    EXPECT_TRUE(res.hasHealer);
-    EXPECT_EQ(res.realDpsCount, 1u);
-    EXPECT_EQ(res.tankBotsNeeded, 0u);
-    EXPECT_EQ(res.healerBotsNeeded, 0u);
-    EXPECT_EQ(res.dpsBotsNeeded, 2u); // 3 members + 2 DPS bots = 5 total
-
-    uint32 totalGroup = 3u + res.tankBotsNeeded + res.healerBotsNeeded + res.dpsBotsNeeded;
-    EXPECT_EQ(totalGroup, 5u);
-}
-
-// =============================================================================
-// Round 3: Census, Instance Profiles & Calibration Tests
-// =============================================================================
-
-TEST(ContentCensusTest, StaticCensusProfilesPopulated)
-{
-    EXPECT_GE(sGeneratedInstanceProfiles.size(), 90u);
-
-    // Verify key landmark instances
-    auto const* deadmines = FindGeneratedInstanceProfile(36);
-    ASSERT_NE(deadmines, nullptr);
-    EXPECT_EQ(deadmines->era, ContentEra::Classic);
-    EXPECT_FALSE(deadmines->isRaid);
-    EXPECT_EQ(deadmines->tier, ContentTier::DUNGEON_NORMAL);
-
-    auto const* moltenCore = FindGeneratedInstanceProfile(409);
-    ASSERT_NE(moltenCore, nullptr);
-    EXPECT_EQ(moltenCore->era, ContentEra::Classic);
-    EXPECT_TRUE(moltenCore->isRaid);
-    EXPECT_EQ(moltenCore->tier, ContentTier::RAID_MID);
-    EXPECT_EQ(moltenCore->intendedPlayers, 40u);
-
-    auto const* karazhan = FindGeneratedInstanceProfile(532);
-    ASSERT_NE(karazhan, nullptr);
-    EXPECT_EQ(karazhan->era, ContentEra::TBC);
-    EXPECT_TRUE(karazhan->isRaid);
-    EXPECT_EQ(karazhan->tier, ContentTier::RAID_ENTRY);
-    EXPECT_EQ(karazhan->intendedPlayers, 10u);
-
-    auto const* naxx = FindGeneratedInstanceProfile(533);
-    ASSERT_NE(naxx, nullptr);
-    EXPECT_EQ(naxx->era, ContentEra::WotLK);
-    EXPECT_TRUE(naxx->isRaid);
-    EXPECT_EQ(naxx->tier, ContentTier::RAID_ENTRY);
-
-    auto const* icc = FindGeneratedInstanceProfile(631);
-    ASSERT_NE(icc, nullptr);
-    EXPECT_EQ(icc->era, ContentEra::WotLK);
-    EXPECT_TRUE(icc->isRaid);
-    EXPECT_EQ(icc->tier, ContentTier::RAID_PINNACLE);
-}
-
-TEST(ContentCensusTest, InstanceProfileRegistryTiersCalibrated)
-{
-    sInstanceProfileRegistry->Initialize();
+    sInstanceProfileRegistry->Clear();
+    sInstanceProfileRegistry->RegisterProfile(InstanceProfile{ .mapId = 36, .name = "The Deadmines" });
+    sInstanceProfileRegistry->RegisterProfile(InstanceProfile{ .mapId = 409, .name = "Molten Core",
+        .tier = InstanceProfileRegistry::GetAuthoredTier(409, true), .kind = MapContentKind::RAID,
+        .defaultGroupSize = 40, .raid25Size = 40, .isRaid = true });
+    sInstanceProfileRegistry->RegisterMapKind(30, MapContentKind::BATTLEGROUND);
 
     std::vector<std::string> issues;
-    bool ok = sInstanceProfileRegistry->ValidateAll(issues);
-    for (auto const& issue : issues)
-        std::cout << "ISSUE: " << issue << std::endl;
-    EXPECT_TRUE(ok);
+    EXPECT_TRUE(sInstanceProfileRegistry->ValidateAll(issues));
 
-    // Check tier resolution
     EXPECT_EQ(sInstanceProfileRegistry->GetTierForMap(36), ContentTier::DUNGEON_NORMAL);
     EXPECT_EQ(sInstanceProfileRegistry->GetTierForMap(36, 1), ContentTier::DUNGEON_HEROIC); // Heroic difficulty = 1
     EXPECT_EQ(sInstanceProfileRegistry->GetTierForMap(409), ContentTier::RAID_MID);
-    EXPECT_EQ(sInstanceProfileRegistry->GetTierForMap(531), ContentTier::RAID_PINNACLE);
-    EXPECT_EQ(sInstanceProfileRegistry->GetTierForMap(631), ContentTier::RAID_PINNACLE);
+    EXPECT_EQ(sInstanceProfileRegistry->GetIntendedPlayers(409, 0), 40u);
+    EXPECT_EQ(sInstanceProfileRegistry->GetKindForMap(409), MapContentKind::RAID);
+    EXPECT_FALSE(sInstanceProfileRegistry->HasProfile(30));
+    EXPECT_FALSE(IsPvEInstanceKind(sInstanceProfileRegistry->GetKindForMap(30)));
+
+    sInstanceProfileRegistry->Clear();
 }
 
 TEST(ProgressionCalibrationTest, Cap60AllEras_MonotonicZoneCompression)
@@ -1124,158 +667,36 @@ TEST(ProgressionCalibrationTest, QuestChainMonotonicity_NeverInverts)
 }
 
 // =============================================================================
-// Round 3.1: Census Integrity, Generated Profiles & Runtime Wiring Tests
+// Round 3.1: Dungeon Access Tests
 // =============================================================================
 
-TEST(ContentCensusIntegrityTest, PvPMapsExcludedFromInstanceRegistry)
-{
-    sInstanceProfileRegistry->Initialize();
-
-    // Verified list of Battlegrounds and Arenas in WoW 3.3.5a
-    static constexpr uint32 pvpMaps[] = { 30, 489, 529, 559, 562, 566, 572, 607, 617, 618, 628 };
-
-    for (uint32 mapId : pvpMaps)
-    {
-        // 1. InstanceProfileRegistry must NEVER register or have a profile for PvP maps
-        EXPECT_FALSE(sInstanceProfileRegistry->HasProfile(mapId))
-            << "PvP Map " << mapId << " should NOT be in InstanceProfileRegistry!";
-        EXPECT_EQ(sInstanceProfileRegistry->GetProfile(mapId), nullptr)
-            << "PvP Map " << mapId << " should return nullptr from GetProfile!";
-
-        // 2. Kind helper must classify as BATTLEGROUND or ARENA, never DUNGEON or RAID
-        MapContentKind kind = sInstanceProfileRegistry->GetKindForMap(mapId);
-        EXPECT_TRUE(kind == MapContentKind::BATTLEGROUND || kind == MapContentKind::ARENA)
-            << "Map " << mapId << " has unexpected kind: " << static_cast<uint32>(kind);
-        EXPECT_FALSE(IsPvEInstanceKind(kind))
-            << "Map " << mapId << " was wrongly considered a PvE instance!";
-    }
-}
-
-TEST(ContentCensusIntegrityTest, GeneratedCensusSchemaAndCounts)
-{
-    EXPECT_EQ(GENERATED_CONTENT_CENSUS_SCHEMA_VERSION, 311);
-    EXPECT_EQ(sGeneratedMapProfiles.size(), 374u);
-    EXPECT_EQ(sGeneratedInstanceProfiles.size(), 221u); // 221 PvE instance difficulty variants
-    EXPECT_EQ(sGeneratedCreaturePlacements.size(), 18751u); // 100% active production spawns
-    EXPECT_EQ(sGeneratedQuestProfiles.size(), 10106u);
-    EXPECT_EQ(sGeneratedItemProfiles.size(), 3865u);
-    EXPECT_EQ(sGeneratedLfgProfiles.size(), 423u);
-    EXPECT_EQ(sGeneratedAccessProfiles.size(), 121u);
-}
-
-TEST(ContentCensusIntegrityTest, QuestRuntimeUsesGeneratedCensus)
-{
-    // Quest 203 in census
-    auto const* q203 = FindGeneratedQuestProfile(203);
-    ASSERT_NE(q203, nullptr);
-    EXPECT_EQ(q203->era, ContentEra::Classic);
-    EXPECT_EQ(q203->authoredLevel, 33);
-    EXPECT_EQ(q203->authoredMinLevel, 30);
-    EXPECT_GE(q203->confidence, 80u);
-
-    // Verify ContentPackRegistry resolution delegates to generated census
-    EraResolutionResult res = sContentPackRegistry->ResolveEraDetailsForQuest(203, 12, 0, 33);
-    EXPECT_EQ(res.era, ContentEra::Classic);
-    EXPECT_EQ(res.source, EraResolutionSource::ContentCensus);
-    EXPECT_FLOAT_EQ(res.confidence, static_cast<float>(q203->confidence) / 100.0f);
-}
-
-TEST(ContentCensusIntegrityTest, CreaturePlacementAwareResolution)
-{
-    // Test creature entry in census: entry with map placement
-    ASSERT_FALSE(sGeneratedCreaturePlacements.empty());
-    auto const& sample = sGeneratedCreaturePlacements[0];
-
-    auto const* found = FindGeneratedCreaturePlacement(sample.entry, sample.mapId);
-    ASSERT_NE(found, nullptr);
-    EXPECT_EQ(found->entry, sample.entry);
-    EXPECT_EQ(found->mapId, sample.mapId);
-    EXPECT_EQ(found->era, sample.era);
-
-    EraResolutionResult res = sContentPackRegistry->ResolveEraDetailsForCreature(
-        sample.entry, sample.mapId, 0, 0, 70);
-    EXPECT_EQ(res.era, sample.era);
-    EXPECT_EQ(res.source, EraResolutionSource::ContentCensus);
-}
-
-TEST(ContentCensusIntegrityTest, LfgAndDungeonAccessScaling)
+TEST(DungeonAccessTest, NorthrendAccessLevelsFollowTheWotLKBand)
 {
     ProgressionLayout layoutCap60 = ProgressionLayout::Create(60, true, true);
     // Classic: 1-45, TBC: 45-55, WotLK: 55-60
 
-    // Utgarde Keep (LFG Dungeon ID 242, Map 574, Authored min 69, max 72, target 70)
-    auto const* ukLfg = FindGeneratedLfgProfile(242);
-    ASSERT_NE(ukLfg, nullptr);
-    EXPECT_EQ(ukLfg->era, ContentEra::WotLK);
-    EXPECT_EQ(ukLfg->mapId, 574u);
-
-    uint8 scaledMin = layoutCap60.MapAuthoredToEffective(ukLfg->era, ukLfg->authoredMin);
-    uint8 scaledMax = layoutCap60.MapAuthoredToEffective(ukLfg->era, ukLfg->authoredMax);
+    // Utgarde Keep asks for 69 to 72 as authored.
+    uint8 const scaledMin = layoutCap60.MapAuthoredToEffective(ContentEra::WotLK, 69);
+    uint8 const scaledMax = layoutCap60.MapAuthoredToEffective(ContentEra::WotLK, 72);
     EXPECT_GE(scaledMin, 55);
     EXPECT_LE(scaledMax, 60);
     EXPECT_LE(scaledMin, scaledMax);
-
-    // Access profile for Utgarde Keep (Map 574)
-    auto const* ukAccess = FindGeneratedAccessProfile(574, 0);
-    ASSERT_NE(ukAccess, nullptr);
-    EXPECT_EQ(ukAccess->era, ContentEra::WotLK);
-    uint8 accMin = layoutCap60.MapAuthoredToEffective(ukAccess->era, ukAccess->authoredMin);
-    uint8 accMax = layoutCap60.MapAuthoredToEffective(ukAccess->era, ukAccess->authoredMax);
-    EXPECT_GE(accMin, 55);
-    EXPECT_LE(accMax, 60);
 
     // Expansion locked check when WotLK is disabled
     ProgressionLayout layoutClassicTBC = ProgressionLayout::Create(70, true, false);
     EXPECT_FALSE(layoutClassicTBC.IsEraEnabled(ContentEra::WotLK));
 }
 
-TEST(ContentCensusIntegrityTest, ItemSourceTiersAndOutlierClassification)
-{
-    // Landmark items in census
-    // Classic raid item: Elementium Reinforced Bulwark (Item 19354, BWL Map 469 -> RAID_END)
-    auto const* bwlShield = FindGeneratedItemProfile(19354);
-    ASSERT_NE(bwlShield, nullptr);
-    EXPECT_EQ(bwlShield->era, ContentEra::Classic);
-    EXPECT_EQ(bwlShield->tier, ContentTier::RAID_END);
-
-    // TBC Legendary: Warglaive of Azzinoth (BT Map 564, Item 32837 -> RAID_END)
-    auto const* warglaive = FindGeneratedItemProfile(32837);
-    ASSERT_NE(warglaive, nullptr);
-    EXPECT_EQ(warglaive->era, ContentEra::TBC);
-    EXPECT_EQ(warglaive->tier, ContentTier::RAID_END);
-
-    // WotLK Pinnacle: Item 50351 (ICC Map 631 -> RAID_PINNACLE)
-    auto const* iccTrinket = FindGeneratedItemProfile(50351);
-    ASSERT_NE(iccTrinket, nullptr);
-    EXPECT_EQ(iccTrinket->era, ContentEra::WotLK);
-    EXPECT_EQ(iccTrinket->tier, ContentTier::RAID_PINNACLE);
-}
-
 // =============================================================================
 // Round 3.2: Item Runtime Authority & Policy Enforcement Tests
 // =============================================================================
-
-TEST(ItemRuntimeAuthorityTest, GeneratedTierWinsOverMisleadingIlvl)
-{
-    ItemTemplate fakeItem;
-    fakeItem.ItemId = 32837; // Warglaive of Azzinoth in census (BT, RAID_END)
-    fakeItem.ItemLevel = 156;
-    fakeItem.RequiredLevel = 70;
-
-    ItemScalingContext ctx = ItemScalingContext::Resolve(&fakeItem);
-    EXPECT_TRUE(ctx.hasGeneratedProfile);
-    EXPECT_FALSE(ctx.fallbackTierInference);
-    EXPECT_EQ(ctx.era, ContentEra::TBC);
-    EXPECT_EQ(ctx.tier, ContentTier::RAID_END);
-    EXPECT_EQ(ctx.policy, ItemScalingPolicy::REVIEW_SPECIAL); // Has proc / use flags
-}
 
 TEST(ItemRuntimeAuthorityTest, WotLKTierProgressionMonotonicAtCap60)
 {
     ProgressionLayout layout = ProgressionLayout::Create(60, true, true);
     // Classic: 1-45, TBC: 45-55, WotLK: 55-60
 
-    // Representative real items from current census:
+    // Representative real items:
     // Naxxramas: Item 39291 (RAID_ENTRY, auth ilvl 200, req 80)
     // Ulduar: Item 44005 (RAID_MID, auth ilvl 226, req 80)
     // ToC: Item 45086 (RAID_END, auth ilvl 232, req 80)
@@ -1321,7 +742,7 @@ TEST(ItemRuntimeAuthorityTest, TBCTierProgressionMonotonicAtCap60)
 {
     ProgressionLayout layout = ProgressionLayout::Create(60, true, true);
 
-    // Representative real items from current census:
+    // Representative real items:
     // Karazhan: Item 24079 (RAID_ENTRY, ilvl 115)
     // SSC/TK: Item 30105 (RAID_MID, ilvl 128)
     // BT/Hyjal: Item 32505 (RAID_END, ilvl 141)
@@ -1361,7 +782,7 @@ TEST(ItemRuntimeAuthorityTest, CustomItemSafetyAndPreservePolicies)
 {
     ProgressionLayout layout = ProgressionLayout::Create(60, true, true);
 
-    // 1. Profiled Custom Cosmetic: Wizened Wizard (100002) in generated census
+    // 1. Custom Cosmetic: Wizened Wizard (100002)
     ItemTemplate cosmetic;
     cosmetic.ItemId = 100002;
     cosmetic.ItemLevel = 20;
@@ -1369,7 +790,6 @@ TEST(ItemRuntimeAuthorityTest, CustomItemSafetyAndPreservePolicies)
     cosmetic.Armor = 0;
 
     ItemScalingContext ctxCosmetic = ItemScalingContext::Resolve(&cosmetic);
-    EXPECT_TRUE(ctxCosmetic.hasGeneratedProfile);
     EXPECT_EQ(ctxCosmetic.policy, ItemScalingPolicy::PRESERVE);
     EXPECT_TRUE(ctxCosmetic.specialFlags & ITEM_SPECIAL_PRESERVE);
 
@@ -1378,38 +798,25 @@ TEST(ItemRuntimeAuthorityTest, CustomItemSafetyAndPreservePolicies)
     EXPECT_EQ(bCosmetic.effectiveRequiredLevel, cosmetic.RequiredLevel);
     EXPECT_FLOAT_EQ(bCosmetic.statMultiplier, 1.0f);
 
-    // 2. Profiled Custom Service / Potion: Race Change Potion (200001) in generated census
+    // 2. Custom Service / Potion: Race Change Potion (200001)
     ItemTemplate classItem;
     classItem.ItemId = 200001;
     classItem.ItemLevel = 64;
     classItem.RequiredLevel = 0;
 
     ItemScalingContext ctxClass = ItemScalingContext::Resolve(&classItem);
-    EXPECT_TRUE(ctxCosmetic.hasGeneratedProfile);
     EXPECT_EQ(ctxClass.policy, ItemScalingPolicy::PRESERVE);
     ScaledItemBudget bClass = sItemBudgetScaler->CalculateItemBudget(&classItem, layout, ctxClass);
     EXPECT_EQ(bClass.effectiveItemLevel, classItem.ItemLevel);
     EXPECT_FLOAT_EQ(bClass.statMultiplier, 1.0f);
 
-    // 3. Profiled Custom Gameplay: Havoc's Call (350012) in generated census
-    ItemTemplate gameplayItem;
-    gameplayItem.ItemId = 350012;
-    gameplayItem.ItemLevel = 287;
-    gameplayItem.RequiredLevel = 80;
-
-    ItemScalingContext ctxGameplay = ItemScalingContext::Resolve(&gameplayItem);
-    EXPECT_TRUE(ctxGameplay.hasGeneratedProfile);
-    EXPECT_EQ(ctxGameplay.policy, ItemScalingPolicy::TIER_ALIGNED);
-    EXPECT_FALSE(ctxGameplay.specialFlags & ITEM_SPECIAL_PRESERVE);
-
-    // 4. Unprofiled custom item in a preserved range: no stat budget, left exactly as authored.
+    // 3. Custom item in a preserved range: no stat budget, left exactly as authored.
     ItemTemplate unprofiledCosmetic;
     unprofiledCosmetic.ItemId = 150000;
     unprofiledCosmetic.ItemLevel = 80;
     unprofiledCosmetic.RequiredLevel = 60;
 
     ItemScalingContext ctxUnprofiledCosmetic = ItemScalingContext::Resolve(&unprofiledCosmetic);
-    EXPECT_FALSE(ctxUnprofiledCosmetic.hasGeneratedProfile);
     EXPECT_EQ(ctxUnprofiledCosmetic.policy, ItemScalingPolicy::PRESERVE);
     EXPECT_TRUE(ctxUnprofiledCosmetic.specialFlags & ITEM_SPECIAL_CUSTOM);
     EXPECT_TRUE(ctxUnprofiledCosmetic.specialFlags & ITEM_SPECIAL_PRESERVE);
@@ -1418,7 +825,7 @@ TEST(ItemRuntimeAuthorityTest, CustomItemSafetyAndPreservePolicies)
     EXPECT_EQ(bUnprofiledCosmetic.effectiveItemLevel, unprofiledCosmetic.ItemLevel);
     EXPECT_FLOAT_EQ(bUnprofiledCosmetic.statMultiplier, 1.0f);
 
-    // 5. Unprofiled custom item in the gameplay range, above where that range used to stop: this is
+    // 4. Custom item in the gameplay range, above where that range used to stop: this is
     // equipment with statistics - the Bloodforged and Heroic versions live here - and is scaled.
     ItemTemplate unprofiledGameplay;
     unprofiledGameplay.ItemId = 750000;
@@ -1426,13 +833,12 @@ TEST(ItemRuntimeAuthorityTest, CustomItemSafetyAndPreservePolicies)
     unprofiledGameplay.RequiredLevel = 60;
 
     ItemScalingContext ctxUnprofiledGameplay = ItemScalingContext::Resolve(&unprofiledGameplay);
-    EXPECT_FALSE(ctxUnprofiledGameplay.hasGeneratedProfile);
     EXPECT_NE(ctxUnprofiledGameplay.policy, ItemScalingPolicy::PRESERVE);
     EXPECT_TRUE(ctxUnprofiledGameplay.specialFlags & ITEM_SPECIAL_CUSTOM);
     EXPECT_FALSE(ctxUnprofiledGameplay.specialFlags & ITEM_SPECIAL_PRESERVE);
 }
 
-TEST(ItemRuntimeAuthorityTest, MissingGeneratedProfileSafelyFallsBack)
+TEST(ItemRuntimeAuthorityTest, UnprofiledItemFallsBackToItemLevel)
 {
     ProgressionLayout layout = ProgressionLayout::Create(60, true, true);
 
@@ -1443,7 +849,6 @@ TEST(ItemRuntimeAuthorityTest, MissingGeneratedProfileSafelyFallsBack)
     unprofiled.RequiredLevel = 80;
 
     ItemScalingContext ctx = ItemScalingContext::Resolve(&unprofiled);
-    EXPECT_FALSE(ctx.hasGeneratedProfile);
     EXPECT_TRUE(ctx.fallbackTierInference);
     EXPECT_EQ(ctx.era, ContentEra::WotLK);
     EXPECT_EQ(ctx.tier, ContentTier::RAID_ENTRY);
@@ -1486,30 +891,8 @@ TEST(ItemRuntimeAuthorityTest, ScaleAllItemsIdempotenceProtection)
 }
 
 // ============================================================================
-// Round 3.3 — Source Graph Authority & Census Completeness Tests
+// Round 3.3 — Item Source Authority Tests
 // ============================================================================
-
-TEST(SourceGraphAuthorityTest, WarglaiveOfAzzinothIsRaidEndNotPinnacle)
-{
-    // Item 32837: Warglaive of Azzinoth
-    // Authoritative source: Illidan Stormrage (Creature 22917) in Black Temple (Map 564)
-    // Must be classified as RAID_END with sourceMap = 564, NOT RAID_PINNACLE
-    auto const* prof = FindGeneratedItemProfile(32837);
-    ASSERT_NE(prof, nullptr);
-    EXPECT_EQ(prof->era, ContentEra::TBC);
-    EXPECT_EQ(prof->tier, ContentTier::RAID_END);
-    EXPECT_EQ(prof->sourceMap, 564u); // Black Temple
-
-    ItemTemplate warglaive;
-    warglaive.ItemId = 32837;
-    warglaive.ItemLevel = 156;
-    warglaive.RequiredLevel = 70;
-
-    ItemScalingContext ctx = ItemScalingContext::Resolve(&warglaive);
-    EXPECT_TRUE(ctx.hasGeneratedProfile);
-    EXPECT_EQ(ctx.tier, ContentTier::RAID_END);
-    EXPECT_EQ(ctx.sourceMap, 564u);
-}
 
 TEST(SourceGraphAuthorityTest, PreservedItemsKeepTheirTemplate)
 {
@@ -1523,54 +906,7 @@ TEST(SourceGraphAuthorityTest, PreservedItemsKeepTheirTemplate)
     sItemBudgetScaler->PreserveItems({});
 
     EXPECT_EQ(preserved.policy, ItemScalingPolicy::PRESERVE);
-    EXPECT_EQ(preserved.tier, ContentTier::RAID_END);
-    EXPECT_EQ(preserved.sourceMap, 564u);
     EXPECT_NE(ItemScalingContext::Resolve(&warglaive).policy, ItemScalingPolicy::PRESERVE);
-}
-
-TEST(SourceGraphAuthorityTest, SunwellItemsPreserveRaidPinnacle)
-{
-    // Item 34334: Thori'dal, the Stars' Fury
-    // Authoritative source: Kil'jaeden (Creature 25315) in Sunwell Plateau (Map 580)
-    auto const* prof = FindGeneratedItemProfile(34334);
-    ASSERT_NE(prof, nullptr);
-    EXPECT_EQ(prof->era, ContentEra::TBC);
-    EXPECT_EQ(prof->tier, ContentTier::RAID_PINNACLE);
-    EXPECT_EQ(prof->sourceMap, 580u); // Sunwell Plateau
-
-    ItemTemplate thoridal;
-    thoridal.ItemId = 34334;
-    thoridal.ItemLevel = 155;
-    thoridal.RequiredLevel = 70;
-
-    ItemScalingContext ctx = ItemScalingContext::Resolve(&thoridal);
-    EXPECT_TRUE(ctx.hasGeneratedProfile);
-    EXPECT_EQ(ctx.tier, ContentTier::RAID_PINNACLE);
-    EXPECT_EQ(ctx.sourceMap, 580u);
-}
-
-TEST(SourceGraphAuthorityTest, WotlkRaidTiersDrivenBySourceMap)
-{
-    // Naxxramas (Map 533): Item 39291 (Torment of the Banished) -> RAID_ENTRY
-    auto const* profNaxx = FindGeneratedItemProfile(39291);
-    ASSERT_NE(profNaxx, nullptr);
-    EXPECT_EQ(profNaxx->era, ContentEra::WotLK);
-    EXPECT_EQ(profNaxx->tier, ContentTier::RAID_ENTRY);
-    EXPECT_EQ(profNaxx->sourceMap, 533u);
-
-    // Ulduar (Map 603): Item 45086 (Rising Sun) -> RAID_MID
-    auto const* profUlduar = FindGeneratedItemProfile(45086);
-    ASSERT_NE(profUlduar, nullptr);
-    EXPECT_EQ(profUlduar->era, ContentEra::WotLK);
-    EXPECT_EQ(profUlduar->tier, ContentTier::RAID_MID);
-    EXPECT_EQ(profUlduar->sourceMap, 603u);
-
-    // Icecrown Citadel (Map 631): Item 50351 (Tiny Abomination in a Jar) -> RAID_PINNACLE
-    auto const* profIcc = FindGeneratedItemProfile(50351);
-    ASSERT_NE(profIcc, nullptr);
-    EXPECT_EQ(profIcc->era, ContentEra::WotLK);
-    EXPECT_EQ(profIcc->tier, ContentTier::RAID_PINNACLE);
-    EXPECT_EQ(profIcc->sourceMap, 631u);
 }
 
 TEST(SourceGraphAuthorityTest, DungeonHeroicPowerBandDistinctFromRaidEntry)
@@ -1632,121 +968,10 @@ TEST(SourceGraphAuthorityTest, DungeonHeroicPowerBandDistinctFromRaidEntry)
     EXPECT_LT(bWotlkHeroic.effectiveItemLevel, bWotlkRaid.effectiveItemLevel);
 }
 
-TEST(SourceGraphAuthorityTest, HighEntryCreaturePlacementIndexed)
-{
-    // The Lich King (Entry 36597) in ICC (Map 631)
-    // In Round 3.1, [:4000] capped entries and missed 36597.
-    // In Round 3.3, 100% of production spawns are indexed.
-    auto const* lkPlacement = FindGeneratedCreaturePlacement(36597, 631);
-    ASSERT_NE(lkPlacement, nullptr);
-    EXPECT_EQ(lkPlacement->entry, 36597u);
-    EXPECT_EQ(lkPlacement->mapId, 631u);
-    EXPECT_EQ(lkPlacement->era, ContentEra::WotLK);
-}
-
-TEST(SourceGraphAuthorityTest, RealGeneratedHeroicProgressionOrdering)
-{
-    // Validate real generated items from census without manual Context override
-    ProgressionLayout layout = ProgressionLayout::Create(60, true, true);
-
-    // 1. WotLK progression:
-    // Skadi the Ruthless (26693, Utgarde Pinnacle Normal, Map 575): Item 37056 (Drake-Mounted Crossbow, ilvl 187) -> DUNGEON_NORMAL
-    // Skadi the Ruthless (30807, Utgarde Pinnacle Heroic, Map 575): Item 37379 (Netherbreath Spellblade, ilvl 200) -> DUNGEON_HEROIC
-    // Naxxramas Boss Drop (Map 533): Item 39291 (Torment of the Banished, ilvl 200) -> RAID_ENTRY
-    auto const* profNormWotlk = FindGeneratedItemProfile(37056);
-    auto const* profHeroicWotlk = FindGeneratedItemProfile(37379);
-    auto const* profRaidWotlk = FindGeneratedItemProfile(39291);
-
-    ASSERT_NE(profNormWotlk, nullptr);
-    ASSERT_NE(profHeroicWotlk, nullptr);
-    ASSERT_NE(profRaidWotlk, nullptr);
-
-    EXPECT_EQ(profNormWotlk->tier, ContentTier::DUNGEON_NORMAL);
-    EXPECT_EQ(profHeroicWotlk->tier, ContentTier::DUNGEON_HEROIC);
-    EXPECT_EQ(profRaidWotlk->tier, ContentTier::RAID_ENTRY);
-
-    ItemTemplate itemNormWotlk;
-    itemNormWotlk.ItemId = 37056;
-    itemNormWotlk.ItemLevel = 187;
-    itemNormWotlk.RequiredLevel = 80;
-
-    ItemTemplate itemHeroicWotlk;
-    itemHeroicWotlk.ItemId = 37379;
-    itemHeroicWotlk.ItemLevel = 200;
-    itemHeroicWotlk.RequiredLevel = 80;
-
-    ItemTemplate itemRaidWotlk;
-    itemRaidWotlk.ItemId = 39291;
-    itemRaidWotlk.ItemLevel = 200;
-    itemRaidWotlk.RequiredLevel = 80;
-
-    ItemScalingContext ctxNormWotlk = ItemScalingContext::Resolve(&itemNormWotlk);
-    ItemScalingContext ctxHeroicWotlk = ItemScalingContext::Resolve(&itemHeroicWotlk);
-    ItemScalingContext ctxRaidWotlk = ItemScalingContext::Resolve(&itemRaidWotlk);
-
-    EXPECT_EQ(ctxNormWotlk.tier, ContentTier::DUNGEON_NORMAL);
-    EXPECT_EQ(ctxHeroicWotlk.tier, ContentTier::DUNGEON_HEROIC);
-    EXPECT_EQ(ctxRaidWotlk.tier, ContentTier::RAID_ENTRY);
-
-    ScaledItemBudget bNormWotlk = sItemBudgetScaler->CalculateItemBudget(&itemNormWotlk, layout, ctxNormWotlk);
-    ScaledItemBudget bHeroicWotlk = sItemBudgetScaler->CalculateItemBudget(&itemHeroicWotlk, layout, ctxHeroicWotlk);
-    ScaledItemBudget bRaidWotlk = sItemBudgetScaler->CalculateItemBudget(&itemRaidWotlk, layout, ctxRaidWotlk);
-
-    // Strict progression ordering: real Normal item < real Heroic item < real Raid Entry item
-    EXPECT_LT(bNormWotlk.effectiveItemLevel, bHeroicWotlk.effectiveItemLevel);
-    EXPECT_LT(bHeroicWotlk.effectiveItemLevel, bRaidWotlk.effectiveItemLevel);
-
-    // 2. TBC progression:
-    // Watchkeeper Gargolmar Normal (17306, Ramparts, Map 543): Item 24021 (Moonstrider Boots, ilvl 85) -> DUNGEON_NORMAL
-    // Watchkeeper Gargolmar Heroic (18436, Ramparts, Map 543): Item 27447 (Bracers of Just Rewards, ilvl 115) -> DUNGEON_HEROIC
-    // Shade of Aran (16524, Karazhan, Map 532): Item 28612 (Pendant of the Violet Eye, ilvl 115) -> RAID_ENTRY
-    auto const* profNormTbc = FindGeneratedItemProfile(24021);
-    auto const* profHeroicTbc = FindGeneratedItemProfile(27447);
-    auto const* profRaidTbc = FindGeneratedItemProfile(28612);
-
-    ASSERT_NE(profNormTbc, nullptr);
-    ASSERT_NE(profHeroicTbc, nullptr);
-    ASSERT_NE(profRaidTbc, nullptr);
-
-    EXPECT_EQ(profNormTbc->tier, ContentTier::DUNGEON_NORMAL);
-    EXPECT_EQ(profHeroicTbc->tier, ContentTier::DUNGEON_HEROIC);
-    EXPECT_EQ(profRaidTbc->tier, ContentTier::RAID_ENTRY);
-
-    ItemTemplate itemNormTbc;
-    itemNormTbc.ItemId = 24021;
-    itemNormTbc.ItemLevel = 85;
-    itemNormTbc.RequiredLevel = 60;
-
-    ItemTemplate itemHeroicTbc;
-    itemHeroicTbc.ItemId = 27447;
-    itemHeroicTbc.ItemLevel = 115;
-    itemHeroicTbc.RequiredLevel = 70;
-
-    ItemTemplate itemRaidTbc;
-    itemRaidTbc.ItemId = 28612;
-    itemRaidTbc.ItemLevel = 115;
-    itemRaidTbc.RequiredLevel = 70;
-
-    ItemScalingContext ctxNormTbc = ItemScalingContext::Resolve(&itemNormTbc);
-    ItemScalingContext ctxHeroicTbc = ItemScalingContext::Resolve(&itemHeroicTbc);
-    ItemScalingContext ctxRaidTbc = ItemScalingContext::Resolve(&itemRaidTbc);
-
-    EXPECT_EQ(ctxNormTbc.tier, ContentTier::DUNGEON_NORMAL);
-    EXPECT_EQ(ctxHeroicTbc.tier, ContentTier::DUNGEON_HEROIC);
-    EXPECT_EQ(ctxRaidTbc.tier, ContentTier::RAID_ENTRY);
-
-    ScaledItemBudget bNormTbc = sItemBudgetScaler->CalculateItemBudget(&itemNormTbc, layout, ctxNormTbc);
-    ScaledItemBudget bHeroicTbc = sItemBudgetScaler->CalculateItemBudget(&itemHeroicTbc, layout, ctxHeroicTbc);
-    ScaledItemBudget bRaidTbc = sItemBudgetScaler->CalculateItemBudget(&itemRaidTbc, layout, ctxRaidTbc);
-
-    EXPECT_LT(bNormTbc.effectiveItemLevel, bHeroicTbc.effectiveItemLevel);
-    EXPECT_LT(bHeroicTbc.effectiveItemLevel, bRaidTbc.effectiveItemLevel);
-}
-
 TEST(SourceGraphAuthorityTest, NoHardcodedCustomBoundariesInItemBudgetScalerCpp)
 {
     // Verify that ItemBudgetScaler.cpp does not contain hardcoded custom category boundaries (200000, 350000, 600000).
-    // The sole source of truth for custom item ranges and categories is custom_content.json and GeneratedContentCensus.h.
+    // The sole source of truth for custom item ranges and categories is CustomItemRanges.h.
     // Found by walking up from wherever the tests were started, because that is the one thing known
     // about the working directory. The list of guessed absolute paths this replaced held the author's
     // own checkout, so the test could only pass on one machine.

@@ -11,7 +11,6 @@
 #include "ContentTier.h"
 #include "DBCEnums.h"
 #include "Define.h"
-#include "LFG.h"
 #include "ObjectGuid.h"
 #include <cmath>
 #include <mutex>
@@ -77,7 +76,6 @@ struct EncounterScaleSnapshot
     uint32 mechanicParticipants{1};
     uint32 intendedPlayers{5};
     uint32 challengeSize{0};
-    lfg::LfgCompositionMode compositionMode{lfg::LfgCompositionMode::MATCHMAKING};
 
     float healthScale{1.0f};
     float damageScale{1.0f};
@@ -107,7 +105,6 @@ struct InstanceScaleContext
     uint32 mechanicParticipants{1};
     uint32 intendedPlayers{5};
     uint32 challengeSize{0};
-    lfg::LfgCompositionMode compositionMode{lfg::LfgCompositionMode::MATCHMAKING};
 
     Difficulty difficulty{DUNGEON_DIFFICULTY_NORMAL};
 
@@ -165,10 +162,6 @@ public:
     void SetChallengeSize(uint32 mapId, uint32 instanceId, uint32 virtualSize);
     uint32 GetChallengeSize(uint32 mapId, uint32 instanceId) const;
 
-    // Composition mode setting (MATCHMAKING, BOT_FILL, CURRENT_PARTY)
-    void SetCompositionMode(uint32 mapId, uint32 instanceId, lfg::LfgCompositionMode mode);
-    lfg::LfgCompositionMode GetCompositionMode(uint32 mapId, uint32 instanceId) const;
-
     // Build EncounterContext for AdaptiveEncounterMgr queries
     EncounterContext BuildEncounterContext(Map* map, uint32 encounterId);
 
@@ -186,7 +179,6 @@ private:
     // key: (mapId << 32) | instanceId
     std::unordered_map<uint64, InstanceScaleContext> _contexts;
     std::unordered_map<uint64, uint32> _challengeSizes;
-    std::unordered_map<uint64, lfg::LfgCompositionMode> _compositionModes;
 
     // coa_boss_flex cache: entry -> perPlayer[4]
     std::unordered_map<uint32, std::array<uint32, MAX_RAID_DIFFICULTY>> _bossFlexCache;

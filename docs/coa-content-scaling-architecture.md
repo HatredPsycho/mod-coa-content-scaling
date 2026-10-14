@@ -4,12 +4,9 @@
 
 CoA Universal Content Scaling is a modular, data-driven system for AzerothCore / Conquest of Azeroth that decouples character level limits (`MaxPlayerLevel`) and group sizes from authored game content. Instead of destructive SQL migrations altering base tables (`creature_template`, `quest_template`, `item_template`), this system introduces an immutable realm-level progression layout, content-era resolvers, combat budget normalization, dynamic instance/group scaling (from solo 1-player up to 40-player), and adaptive encounter mechanics.
 
-The architecture comprises three distinct, decoupled modules:
-1. **`mod-coa-content-scaling`**: Core engine providing progression layouts, era compression algorithms, combat budget profiles, group scaling with encounter snapshot locking, spell/hazard scaling, item budget scaling, and diagnostic commands (`.coascale`).
-2. **`mod-coa-tbc-content`**: The Burning Crusade content pack (Outland zones, dungeons, raids, level 58-70 curve, TBC encounter adapters).
-3. **`mod-coa-wotlk-content`**: Wrath of the Lich King content pack (Northrend zones, dungeons, raids, level 68-80 curve, WotLK encounter adapters).
+`mod-coa-content-scaling` provides progression layouts, era compression algorithms, combat budget profiles, group scaling with encounter snapshot locking, spell/hazard scaling, item budget scaling, and diagnostic commands (`.coascale`). The era of a map, area, creature, quest or item is resolved from the client data (`Map.dbc` expansion, `AreaTable.dbc` map, `MapDifficulty.dbc` sizes), read once the stores are loaded (`OnBeforeWorldInitialized`).
 
-Classic content is the permanent base world and occupies the available level range when no expansion packs are active. When TBC, WotLK, or both are loaded, the active epochs automatically partition the level space up to `sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)`.
+Classic content is the permanent base world and occupies the available level range when no expansion is enabled. When `CoAContentScaling.TBC.Enable`, `CoAContentScaling.WotLK.Enable` or both are set, the active epochs automatically partition the level space up to `sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL)`.
 
 ---
 

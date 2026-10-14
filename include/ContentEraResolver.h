@@ -1,71 +1,45 @@
 /*
  * CoA Universal Content Scaling
- * ContentPackRegistry: Provider registry for expansion packs and content era resolution.
+ * ContentEraResolver: Which expansion a map, area, creature, quest or item belongs to.
  */
 
-#ifndef COA_CONTENT_PACK_REGISTRY_H
-#define COA_CONTENT_PACK_REGISTRY_H
+#ifndef COA_CONTENT_ERA_RESOLVER_H
+#define COA_CONTENT_ERA_RESOLVER_H
 
 #include "ContentEra.h"
-#include "ContentTier.h"
 #include "Define.h"
-#include "ProgressionLayout.h"
-#include <memory>
-#include <optional>
-#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
-#include <vector>
 
-class IEncounterAdapter;
-
-class IContentPack
+class ContentEraResolver
 {
 public:
-    virtual ~IContentPack() = default;
+    static ContentEraResolver* Instance();
 
-    [[nodiscard]] virtual ContentEra GetEra() const = 0;
-    [[nodiscard]] virtual std::string_view GetName() const = 0;
-    [[nodiscard]] virtual LevelRange GetSourceLevelRange() const = 0;
-
-    [[nodiscard]] virtual bool HandlesMap(uint32 mapId) const = 0;
-    [[nodiscard]] virtual bool HandlesArea(uint32 areaId) const { return false; }
-    [[nodiscard]] virtual bool HandlesCreature(uint32 entry) const { return false; }
-    [[nodiscard]] virtual bool HandlesQuest(uint32 questId) const { return false; }
-    [[nodiscard]] virtual bool HandlesItem(uint32 itemId) const { return false; }
-
-    [[nodiscard]] virtual std::optional<ContentTier> GetEncounterTier(uint32 entry, uint32 mapId) const { return std::nullopt; }
-    [[nodiscard]] virtual IEncounterAdapter const* GetEncounterAdapter(uint32 entry) const { return nullptr; }
-};
-
-class ContentPackRegistry
-{
-public:
-    static ContentPackRegistry* Instance();
-
-    void RegisterPack(std::shared_ptr<IContentPack> pack);
-    void UnregisterPack(ContentEra era);
-
-    // Lifecycle control: registration allowed only before finalization
+    // Reads the expansion of every map and the map of every area from the client data. Lifecycle
+    // control: registration is allowed only before finalization.
+    void LoadClientData();
     void Finalize();
     [[nodiscard]] bool IsFinalized() const { return _finalized; }
 
-    [[nodiscard]] IContentPack const* GetPack(ContentEra era) const;
-    [[nodiscard]] bool HasPack(ContentEra era) const;
-    [[nodiscard]] std::vector<std::shared_ptr<IContentPack>> const& GetPacks() const { return _packs; }
+    void RegisterMapExpansion(uint32 mapId, uint8 expansion);
+    void RegisterAreaMap(uint32 areaId, uint32 mapId);
+    // Areas that shipped with an expansion but were written for Classic levels: the Blood Elf and
+    // Draenei starting zones on the Outland map.
+    void RegisterClassicArea(uint32 areaId);
 
-    // Manual DB/config overrides
+    // Manual overrides
     void RegisterMapOverride(uint32 mapId, ContentEra era);
     void RegisterAreaOverride(uint32 areaId, ContentEra era);
     void RegisterCreatureOverride(uint32 entry, ContentEra era);
     void RegisterQuestOverride(uint32 questId, ContentEra era);
     void RegisterItemOverride(uint32 itemId, ContentEra era);
 
-    // Authoritative 8-level resolution chain:
+    // Resolution chain:
     // 1. Explicit entry override
     // 2. Explicit area override
     // 3. Explicit instance/map profile
-    // 4. Registered content-pack ownership
+    // 4. Map expansion from the client data
     // 5. Authored expansion metadata
     // 6. Zone/sort metadata
     // 7. Authored level heuristic (last resort)
@@ -89,14 +63,22 @@ public:
     [[nodiscard]] ContentEra ResolveEraForItem(uint32 itemId, uint32 itemLevel = 0,
                                                uint32 requiredLevel = 0, uint8 authoredExpansion = 0) const;
 
+    [[nodiscard]] bool IsClassicArea(uint32 areaId) const { return _classicAreas.count(areaId) > 0; }
+    [[nodiscard]] size_t GetMapExpansionCount() const { return _mapExpansions.size(); }
+    [[nodiscard]] size_t GetAreaMapCount() const { return _areaMaps.size(); }
+    [[nodiscard]] size_t GetClassicAreaCount() const { return _classicAreas.size(); }
+
     void Clear();
 
 private:
-    ContentPackRegistry() = default;
+    ContentEraResolver() = default;
 
     bool _finalized{false};
 
-    std::vector<std::shared_ptr<IContentPack>> _packs;
+    std::unordered_map<uint32, ContentEra> _mapExpansions;
+    std::unordered_map<uint32, uint32> _areaMaps;
+    std::unordered_set<uint32> _classicAreas;
+
     std::unordered_map<uint32, ContentEra> _mapOverrides;
     std::unordered_map<uint32, ContentEra> _areaOverrides;
     std::unordered_map<uint32, ContentEra> _creatureOverrides;
@@ -104,6 +86,6 @@ private:
     std::unordered_map<uint32, ContentEra> _itemOverrides;
 };
 
-#define sContentPackRegistry ContentPackRegistry::Instance()
+#define sContentEraResolver ContentEraResolver::Instance()
 
-#endif // COA_CONTENT_PACK_REGISTRY_H
+#endif // COA_CONTENT_ERA_RESOLVER_H

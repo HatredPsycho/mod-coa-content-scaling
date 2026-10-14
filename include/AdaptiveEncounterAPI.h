@@ -9,7 +9,6 @@
 #include "DBCEnums.h"
 #include "EncounterMechanic.h"
 #include "Define.h"
-#include "LFG.h"
 #include <algorithm>
 #include <cmath>
 #include <memory>
@@ -100,7 +99,6 @@ struct EncounterContext
     uint32 challengeSize{0};
 
     Difficulty difficulty{DUNGEON_DIFFICULTY_NORMAL};
-    lfg::LfgCompositionMode compositionMode{lfg::LfgCompositionMode::MATCHMAKING};
 
     bool isPhysicallySolo{true};
     bool isMechanicSolo{true};

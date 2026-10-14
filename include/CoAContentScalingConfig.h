@@ -7,7 +7,6 @@
 #define COA_CONTENT_SCALING_CONFIG_H
 
 #include "Define.h"
-#include "DungeonFinding/LFG.h"
 #include "SoloAssistPolicy.h"
 #include <string>
 #include <string_view>
@@ -19,6 +18,8 @@ namespace CoAContentScalingConfigKeys
     inline constexpr char const* ProgressionMode = "CoAContentScaling.Progression.Mode";
     inline constexpr char const* ProgressionClassicEnd = "CoAContentScaling.Progression.ClassicEnd";
     inline constexpr char const* ProgressionTbcEnd = "CoAContentScaling.Progression.TbcEnd";
+    inline constexpr char const* TbcEnable = "CoAContentScaling.TBC.Enable";
+    inline constexpr char const* WotlkEnable = "CoAContentScaling.WotLK.Enable";
     inline constexpr char const* GroupScalingEnable = "CoAContentScaling.GroupScaling.Enable";
     inline constexpr char const* GroupScalingLockOnEncounterStart = "CoAContentScaling.GroupScaling.LockOnEncounterStart";
     inline constexpr char const* GroupScalingAllowSoloRaids = "CoAContentScaling.GroupScaling.AllowSoloRaids";
@@ -31,8 +32,6 @@ namespace CoAContentScalingConfigKeys
     inline constexpr char const* ScaleItems = "CoAContentScaling.ScaleItems";
     inline constexpr char const* PublishAuraAmounts = "CoAContentScaling.PublishAuraAmounts";
     inline constexpr char const* ScaleEnchantments = "CoAContentScaling.ScaleEnchantments";
-    inline constexpr char const* LfgDefaultMode = "CoAContentScaling.LFG.DefaultMode";
-    inline constexpr char const* LfgDefaultChallengeSize = "CoAContentScaling.LFG.DefaultChallengeSize";
     inline constexpr char const* Debug = "CoAContentScaling.Debug";
     inline constexpr char const* AuthenticMaps = "CoAContentScaling.AuthenticMaps";
     inline constexpr char const* AuthenticHeroicMaps = "CoAContentScaling.AuthenticHeroicMaps";
@@ -49,8 +48,6 @@ namespace CoAContentScalingConfig
     std::string ParseProgressionMode(std::string_view raw);
 
     SoloAssistMode ParseSoloAssistMode(std::string_view raw);
-
-    lfg::LfgCompositionMode ParseLfgCompositionMode(std::string_view raw);
 }
 
 #endif // COA_CONTENT_SCALING_CONFIG_H

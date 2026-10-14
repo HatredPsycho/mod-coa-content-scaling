@@ -10,12 +10,11 @@
 #include "ContentEra.h"
 #include "ContentTier.h"
 #include "Define.h"
-#include "DungeonFinding/LFG.h"
 #include "InstanceScaleContext.h"
 #include "ObjectGuid.h"
 #include "ProgressionLayout.h"
 #include <atomic>
-#include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -26,29 +25,7 @@ class Unit;
 class Quest;
 class Map;
 class InstanceMap;
-class Group;
 struct CreatureTemplate;
-
-namespace lfg
-{
-    struct LfgProposal;
-}
-
-struct PlayerLfgSettings
-{
-    lfg::LfgCompositionMode compositionMode{lfg::LfgCompositionMode::MATCHMAKING};
-    uint32 challengeSize{0}; // 0 = Adaptive, 1 = Solo, 2..40 = fixed
-};
-
-struct PendingInstanceScalePolicy
-{
-    uint32 mapId{0};
-    ObjectGuid groupGuid;
-    uint32 challengeSize{0};
-    lfg::LfgCompositionMode compositionMode{lfg::LfgCompositionMode::MATCHMAKING};
-    uint64 generation{0};
-    uint32 createdAt{0}; // GameTime::GetGameTime()
-};
 
 class CoAContentScaling
 {
@@ -59,6 +36,7 @@ public:
     // The settings that only tune numbers, read again on .reload config.
     void LoadTuning();
     void FinalizeAndInitialize();
+    void LoadContentEras();
     void InitializeLayout();
 
     // Rewrites the item templates, once the world has loaded them.
@@ -68,6 +46,7 @@ public:
     void ScaleAccessRequirements();
 
     [[nodiscard]] bool IsEnabled() const { return _enabled; }
+    [[nodiscard]] bool IsLayoutInitialized() const { return _layoutInitialized; }
     [[nodiscard]] bool IsGroupScalingEnabled() const { return _groupScalingEnabled; }
     [[nodiscard]] float GetDamageMultiplier() const { return _damageMultiplier.load(std::memory_order_relaxed); }
     [[nodiscard]] bool IsWorldLeechEnabled() const { return _worldLeechEnabled.load(std::memory_order_relaxed); }
@@ -124,32 +103,14 @@ public:
     [[nodiscard]] bool IsTbcEnabled() const { return _tbcEnabled; }
     [[nodiscard]] bool IsWotlkEnabled() const { return _wotlkEnabled; }
 
+    // The era of a map on one of its difficulties: Onyxia's Lair is Classic or Northrend content
+    // depending on which one is entered.
+    [[nodiscard]] ContentEra ResolveMapEra(uint32 mapId, uint8 difficulty = 0) const;
+
     // Map access validation
     [[nodiscard]] bool CanPlayerEnterMap(Player const* player, uint32 mapId, uint8 difficulty = 0) const;
 
-    // Which reward bracket a finished random dungeon pays from, for the content rather than for
-    // the number on the character.
-    [[nodiscard]] uint8 ResolveLfgRewardLevel(Player const* player, uint32 dungeonId, uint8 playerLevel) const;
-
-    // LFG Policy & Composition Integration
-    void SetPlayerLfgMode(ObjectGuid guid, lfg::LfgCompositionMode mode);
-    [[nodiscard]] lfg::LfgCompositionMode GetPlayerLfgMode(ObjectGuid guid) const;
-    bool SetPlayerLfgChallenge(ObjectGuid guid, uint32 challengeSize);
-    [[nodiscard]] uint32 GetPlayerLfgChallenge(ObjectGuid guid) const;
-    void LoadPlayerLfgSettings(Player* player);
-    void SavePlayerLfgSettings(Player* player);
     void OnPlayerLogout(Player* player);
-
-    void OnResolveLfgQueuePolicy(ObjectGuid const& guid, lfg::LfgQueuePolicy& policy);
-    void OnLfgProposalMadeGroup(lfg::LfgProposal const& proposal, Group* group);
-    void OnInstanceMapCreated(InstanceMap* instanceMap, Player* player);
-
-    // Pending Policy Lifecycle & Diagnostics
-    std::optional<PendingInstanceScalePolicy> ConsumePendingInstancePolicy(uint32 mapId, ObjectGuid groupGuid, ObjectGuid playerGuid);
-    void PurgeExpiredPendingPolicies();
-    [[nodiscard]] size_t GetPendingGroupPoliciesCount() const;
-    [[nodiscard]] size_t GetPendingPlayerPoliciesCount() const;
-    std::vector<PendingInstanceScalePolicy> GetAllPendingPolicies() const;
 
 private:
     CoAContentScaling() = default;
@@ -157,6 +118,7 @@ private:
     [[nodiscard]] std::unordered_set<uint32> CollectAuthenticItems() const;
 
     bool _enabled{false};
+    bool _layoutInitialized{false};
     bool _tbcEnabled{false};
     bool _wotlkEnabled{false};
 
@@ -183,17 +145,6 @@ private:
     std::unordered_set<uint32> _authenticMaps;
     std::unordered_set<uint32> _authenticHeroicMaps;
     uint8 _authenticHeroicMinLevel{60};
-
-    lfg::LfgCompositionMode _defaultLfgCompositionMode{lfg::LfgCompositionMode::MATCHMAKING};
-    uint32 _defaultLfgChallengeSize{0};
-
-    mutable std::mutex _lfgSettingsLock;
-    std::unordered_map<ObjectGuid, PlayerLfgSettings> _playerLfgSettings;
-
-    mutable std::mutex _pendingPolicyLock;
-    uint64 _pendingPolicyGeneration{0};
-    std::unordered_map<ObjectGuid, PendingInstanceScalePolicy> _pendingInstancePolicies;
-    std::unordered_map<ObjectGuid, PendingInstanceScalePolicy> _pendingPlayerPolicies;
 };
 
 #define sCoAContentScaling CoAContentScaling::Instance()

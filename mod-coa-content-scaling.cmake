@@ -10,7 +10,7 @@ set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_INCLUDES
 set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_SOURCES
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/ProgressionLayout.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/InstanceProfile.cpp"
-    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/ContentPackRegistry.cpp"
+    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/ContentEraResolver.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/ItemBudgetScaler.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/CoAContentScalingConfig.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/src/AdaptiveEncounterAPI.cpp"
@@ -25,17 +25,4 @@ set_property(GLOBAL APPEND PROPERTY ACORE_MODULE_TEST_SOURCES
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/ProgressionLayoutTest.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/LootCreditTest.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/EncounterAdaptationTest.cpp"
-    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/LfgAddonProtocolTest.cpp"
     "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/tests/LiftedItemScalingTest.cpp")
-
-# The expansion content packs ship inside this module rather than as modules of their own, so
-# there is one copy of each and the loader below calls them directly.
-target_include_directories(modules PUBLIC
-    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-tbc-content/src"
-    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-wotlk-content/src"
-)
-
-target_sources(modules PRIVATE
-    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-tbc-content/src/CoATBCContent.cpp"
-    "${CMAKE_SOURCE_DIR}/modules/mod-coa-content-scaling/content-packs/mod-coa-wotlk-content/src/CoAWotLKContent.cpp"
-)

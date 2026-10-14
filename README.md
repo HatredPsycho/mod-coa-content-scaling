@@ -14,19 +14,18 @@ Unlike destructive SQL migration patches that rewrite creature/item/quest databa
 mod-coa-content-scaling (Core Engine)
     ├── ProgressionLayout (Anchor interpolation for any MaxPlayerLevel)
     ├── ContentEra & ContentTier (Separates character level from content power)
-    ├── CombatBudgetProfile (Runtime HP / Damage / Mana / Armor normalization)
+    ├── ContentEraResolver (Era of maps, areas, creatures, quests and items from Map.dbc / AreaTable.dbc)
+    ├── CombatBudgetProfile (Runtime HP / Damage / Mana / Armor normalization in instances)
     ├── InstanceScaleContext (1..N group scaling & Anti-Exploit snapshot lock)
     ├── Spell & Aura Scaling (Dynamic flat spell damage / tick / absorb scaling)
     ├── ItemBudgetScaler (ItemTemplate stats/damage/armor in-memory normalization)
     ├── AdaptiveEncounterAPI & SoloAssistPolicy (Solo / small-group mechanics assist)
     └── Diagnostic Commands (.coascale)
-
-Content Packs (Optional & Independent):
-    ├── content-packs/mod-coa-tbc-content    (Outland, TBC dungeons & raids)
-    └── content-packs/mod-coa-wotlk-content  (Northrend, WotLK dungeons & raids)
 ```
 
-Classic is the base world. Expansion content packs are strictly independent:
+Which expansion a map belongs to comes from the client data (`Map.dbc`, `AreaTable.dbc`, `MapDifficulty.dbc`);
+`CoAContentScaling.TBC.Enable` and `CoAContentScaling.WotLK.Enable` decide which expansions are placed in the
+layout. Classic is the base world, and the expansions are strictly independent:
 - **Classic only**: Classic spans `1 -> MaxPlayerLevel`.
 - **Classic + TBC**: Classic compresses, TBC finishes at `MaxPlayerLevel`.
 - **Classic + WotLK**: Classic compresses, WotLK finishes at `MaxPlayerLevel` (TBC is NOT required).
@@ -50,6 +49,8 @@ In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Si
 - `effectiveLevel` dictates combat-table semantics (hit/miss, glancing, defense).
 - `ContentTier` (`WORLD`, `DUNGEON_NORMAL`, `DUNGEON_HEROIC`, `RAID_ENTRY`..`RAID_PINNACLE`) dictates actual stat budgets (HP, base damage, armor, mana).
 - Replaces authored expansion multipliers with normalized budgets on the fly without database mutations.
+- Only dungeons and raids carry a budget. In the open world a creature takes the base statistics of the level it
+  was moved to, and the realm's own creature scaling lifts it from there.
 
 ### 3. Instance & Group Scaling (1..N Players)
 - PvE dungeons and raids scale dynamically for groups from 1 player up to baseline size (5, 10, 25, 40).
@@ -71,17 +72,6 @@ In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Si
 
 ---
 
-### 7. Core LFG Architecture Integration (Solo / Matchmaking / Bot Fill)
-`mod-coa-content-scaling` hooks into AzerothCore's Dungeon Finding engine (`LFGMgr`, `LFGQueue`) to support flexible group compositions without breaking standard matchmaking:
-- **`LfgCompositionMode`**:
-  - `MATCHMAKING`: Standard automated group assembly with real players.
-  - `BOT_FILL`: Immediately fills missing party roles with autonomous `mod-coa-playerbots` bots.
-  - `CURRENT_PARTY`: Enters the dungeon with the current partial group (or solo) without waiting for 5 players, relying on dynamic instance scaling.
-- **Queue Policy Isolation**: Non-standard queue policies bypass role check and standard composition requirements (`LfgQueuePolicy.bypassMatchmaking`), ensuring solo and partial groups can instantly enter dungeons.
-- **Persistence**: Player LFG preferences (`lfg_mode`, `challenge_size`) are stored in `character_coa_lfg_settings`.
-
----
-
 ## In-Game Diagnostics & Commands
 
 ### Administration (`.coascale`)
@@ -93,31 +83,8 @@ In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Si
 | `.coascale instance` | Shows instance scale context for current map (player count, HP scale, damage scale, lock status). |
 | `.coascale quest <questId>` | Inspects quest authored vs effective level, and era resolution source. |
 | `.coascale item <itemId>` | Inspects item authored vs scaled budget, power band, tier, and era resolution source. |
-| `.coascale lfg` | Displays current player's CoA LFG settings (composition mode, challenge size). |
+| `.coascale eras` | Shows how many maps, areas and instance profiles the era resolution read from the client data. |
 | `.coascale validate` | Performs runtime consistency check on progression boundaries and active configuration. |
-
-### Player LFG Commands
-| Command | Description |
-|---|---|
-| `.lfgmode [matchmaking\|bots\|party]` | Sets personal dungeon finder composition mode (standard queue, bot fill, or partial party). |
-| `.lfgchallenge [adaptive\|1..40]` | Sets instance scaling challenge target (adaptive to group size, or fixed simulated player count). |
-
-Without an argument both commands show the current settings. The settings are kept per character. In a group the leader's setting decides. Random bots never set one and keep
-`LFG.DefaultMode`.
-
-### CoALFGMode Addon
-The CoALFGMode addon sets both from the Dungeon Finder. It is kept with the core's other client addons in
-`Extras/CoALFGMode`, where its README section describes it.
-
-The addon whispers itself in the addon language with the prefix `CoALFG`; the server answers every request with the
-character's state:
-
-| Request | Answer |
-|---|---|
-| `GET`, `MODE matchmaking\|bots\|party`, `CHALLENGE 0..40` | `STATE <mode> <challenge> <scaling 0\|1> <botfill 0\|1>` |
-
-Bot fill is offered only when a bot provider (mod-playerbots) is registered, and every choice is disabled while
-content scaling is off.
 
 ---
 
@@ -127,21 +94,14 @@ content scaling is off.
    ```bash
    git clone https://github.com/Corfirean/mod-coa-content-scaling.git modules/mod-coa-content-scaling
    ```
-2. (Optional) If you want TBC and/or WotLK content packs active, link or copy them into `modules/`:
-   ```bash
-   cp -r modules/mod-coa-content-scaling/content-packs/mod-coa-tbc-content modules/
-   cp -r modules/mod-coa-content-scaling/content-packs/mod-coa-wotlk-content modules/
-   ```
-3. Apply the minor core hook patch if not already present in your fork:
-   ```bash
-   git apply modules/mod-coa-content-scaling/patches/core-hooks.patch
-   ```
-4. Re-run CMake and compile:
+2. Build against a core that carries the content scaling hooks (`ContentScalingHooks.h`, the encounter mechanic and
+   dungeon access hooks): the `coa-scaling` branch of the CoA fork.
+3. Re-run CMake and compile:
    ```bash
    cmake -B build
    cmake --build build --config Release
    ```
-5. Copy configuration file:
+4. Copy configuration file:
    ```bash
    cp modules/mod-coa-content-scaling/conf/mod-coa-content-scaling.conf.dist env/dist/etc/mod-coa-content-scaling.conf
    ```
@@ -160,6 +120,10 @@ CoAContentScaling.Progression.Mode = "Auto"
 CoAContentScaling.Progression.ClassicEnd = 0
 CoAContentScaling.Progression.TbcEnd = 0
 
+# Expansions placed in the layout
+CoAContentScaling.TBC.Enable = 0
+CoAContentScaling.WotLK.Enable = 0
+
 # Group & Instance Scaling
 CoAContentScaling.GroupScaling.Enable = 1
 CoAContentScaling.GroupScaling.LockOnEncounterStart = 1
@@ -171,9 +135,6 @@ CoAContentScaling.SoloAssist.Mode = 0
 # Adaptive Mechanics & Rewards
 CoAContentScaling.AdaptiveMechanics.Enable = 1
 CoAContentScaling.Rewards.ScaleLootCount = 1
-
-# LFG Integration Default Mode (0 = Matchmaking, 1 = Bot Fill, 2 = Current Party)
-CoAContentScaling.LFG.DefaultMode = 0
 
 # Debug Logging
 CoAContentScaling.Debug = 0

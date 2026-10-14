@@ -1,6 +1,6 @@
 /*
  * CoA Universal Content Scaling
- * CoAContentScalingCommands: Diagnostic and administration commands (.coascale, .lfgmode, .lfgchallenge).
+ * CoAContentScalingCommands: Diagnostic and administration commands (.coascale).
  */
 
 #include "AdaptiveEncounterAPI.h"
@@ -8,9 +8,9 @@
 #include "CoAContentScaling.h"
 #include "CombatBudgetProfile.h"
 #include "CommandScript.h"
-#include "ContentPackRegistry.h"
+#include "ContentEraResolver.h"
 #include "Creature.h"
-#include "GeneratedContentCensus.h"
+#include "InstanceProfile.h"
 #include "InstanceScaleContext.h"
 #include "ItemBudgetScaler.h"
 #include "ItemTemplate.h"
@@ -33,18 +33,10 @@ public:
 
     ChatCommandTable GetCommands() const override
     {
-        static ChatCommandTable const coaScaleLfgCommandTable =
-        {
-            { "",          HandleLfgStatus,    SEC_PLAYER, Console::No },
-            { "mode",      HandleLfgMode,      SEC_PLAYER, Console::No },
-            { "challenge", HandleLfgChallenge, SEC_PLAYER, Console::No },
-            { "dungeon",   HandleLfgDungeon,   SEC_ADMINISTRATOR, Console::Yes },
-        };
-
         static ChatCommandTable const coaScaleCommandTable =
         {
             { "status",      HandleStatus,      SEC_ADMINISTRATOR, Console::Yes },
-            { "census",      HandleCensus,      SEC_ADMINISTRATOR, Console::Yes },
+            { "eras",        HandleEras,        SEC_ADMINISTRATOR, Console::Yes },
             { "layout",      HandleLayout,      SEC_ADMINISTRATOR, Console::Yes },
             { "progression", HandleProgression, SEC_PLAYER,        Console::No },
             { "creature",    HandleCreature,    SEC_ADMINISTRATOR, Console::No },
@@ -53,14 +45,11 @@ public:
             { "quest",       HandleQuest,       SEC_ADMINISTRATOR, Console::Yes },
             { "item",        HandleItem,        SEC_ADMINISTRATOR, Console::Yes },
             { "validate",    HandleValidate,    SEC_ADMINISTRATOR, Console::Yes },
-            { "lfg",         coaScaleLfgCommandTable },
         };
 
         static ChatCommandTable const commandTable =
         {
-            { "coascale",     coaScaleCommandTable },
-            { "lfgmode",      HandleLfgMode,      SEC_PLAYER, Console::No },
-            { "lfgchallenge", HandleLfgChallenge, SEC_PLAYER, Console::No },
+            { "coascale", coaScaleCommandTable },
         };
         return commandTable;
     }
@@ -83,17 +72,13 @@ private:
         return true;
     }
 
-    static bool HandleCensus(ChatHandler* handler)
+    static bool HandleEras(ChatHandler* handler)
     {
-        handler->PSendSysMessage("=== CoA Content Census Status (Schema: {}) ===", GENERATED_CONTENT_CENSUS_SCHEMA_VERSION);
-        handler->PSendSysMessage("Authoritative Maps: {} (PvE Instances: {}, Excluded PvP: 65)",
-            sGeneratedMapProfiles.size(), sGeneratedInstanceProfiles.size());
-        handler->PSendSysMessage("Quests: {} profiles in census", sGeneratedQuestProfiles.size());
-        handler->PSendSysMessage("Creature Placements: {} spawn-map profiles", sGeneratedCreaturePlacements.size());
-        handler->PSendSysMessage("Item Drops: {} equipment profiles", sGeneratedItemProfiles.size());
-        handler->PSendSysMessage("LFG Dungeon Entries: {} profiles mapped", sGeneratedLfgProfiles.size());
-        handler->PSendSysMessage("Dungeon Access Entries: {} profiles mapped", sGeneratedAccessProfiles.size());
-        handler->PSendSysMessage("Generator: v3.1.0 (Census Integrity: High Confidence, 0 PvP Leaks)");
+        handler->PSendSysMessage("=== CoA Content Era Sources ===");
+        handler->PSendSysMessage("Map expansions: {} | Area maps: {} | Classic areas on Outland: {}",
+            sContentEraResolver->GetMapExpansionCount(), sContentEraResolver->GetAreaMapCount(),
+            sContentEraResolver->GetClassicAreaCount());
+        handler->PSendSysMessage("PvE instance profiles: {}", sInstanceProfileRegistry->GetProfileCount());
         return true;
     }
 
@@ -184,7 +169,7 @@ private:
         fullGroupCtx.groupHealthScale = 1.0f;
         fullGroupCtx.groupDamageScale = 1.0f;
         CalculatedCombatBudget const fullGroup = sCombatBudgetProfile->CalculateBudget(cinfo, fullGroupCtx);
-        EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForCreature(
+        EraResolutionResult const eraRes = sContentEraResolver->ResolveEraDetailsForCreature(
             cinfo->Entry, target->GetMapId(), target->GetAreaId(), cinfo->expansion, cinfo->maxlevel);
 
         handler->PSendSysMessage("=== Creature Scaling: {} (Entry: {}) ===", cinfo->Name.c_str(), cinfo->Entry);
@@ -219,7 +204,7 @@ private:
         }
 
         InstanceScaleContext const ctx = sInstanceScalingMgr->GetOrCreateContext(map);
-        EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForMap(ctx.mapId);
+        EraResolutionResult const eraRes = sContentEraResolver->ResolveEraDetailsForMap(ctx.mapId);
 
         handler->PSendSysMessage("=== Instance Group Scaling (Map: {}, Inst: {}) ===", ctx.mapId, ctx.instanceId);
         handler->PSendSysMessage("Era: {} | Resolved by: {}",
@@ -304,7 +289,7 @@ private:
             return true;
         }
 
-        EraResolutionResult const eraRes = sContentPackRegistry->ResolveEraDetailsForQuest(
+        EraResolutionResult const eraRes = sContentEraResolver->ResolveEraDetailsForQuest(
             questId, quest->GetZoneOrSort(), 0, quest->GetQuestLevel());
         ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
         int32 const effectiveLevel = sCoAContentScaling->GetEffectiveQuestLevel(quest);
@@ -346,24 +331,11 @@ private:
 
         ItemScalingContext const ctx = ItemScalingContext::Resolve(item);
 
-        char const* authorityOrigin = "FALLBACK_ILVL";
-        if (ctx.hasGeneratedProfile)
-        {
-            if (ctx.sourceMap != 0)
-                authorityOrigin = "INSTANCE_LOOT";
-            else if (ctx.specialFlags & ITEM_SPECIAL_CUSTOM)
-                authorityOrigin = "CUSTOM_OVERRIDE";
-            else
-                authorityOrigin = "CENSUS_PROFILE";
-        }
-        else if (ctx.specialFlags & ITEM_SPECIAL_CUSTOM)
-        {
-            authorityOrigin = "CUSTOM_FALLBACK";
-        }
+        char const* const authorityOrigin = (ctx.specialFlags & ITEM_SPECIAL_CUSTOM) ? "CUSTOM_RANGE" : "FALLBACK_ILVL";
 
         handler->PSendSysMessage("=== Item Scaling: {} (ID: {}) ===", item->Name1.c_str(), itemId);
-        handler->PSendSysMessage("Authority Origin: {} | Generated Profile: {} | Fallback: {}",
-            authorityOrigin, ctx.hasGeneratedProfile ? "Yes" : "No", ctx.fallbackTierInference ? "Yes" : "No");
+        handler->PSendSysMessage("Authority Origin: {} | Fallback: {}",
+            authorityOrigin, ctx.fallbackTierInference ? "Yes" : "No");
         handler->PSendSysMessage("Era: {} | Tier: {} | Policy: {}",
             ContentEraToString(ctx.era).data(), ContentTierToString(ctx.tier).data(), ItemScalingPolicyToString(ctx.policy).data());
         handler->PSendSysMessage("Source Map: {} | Special Flags: 0x{:02X}", ctx.sourceMap, uint32(ctx.specialFlags));
@@ -410,174 +382,7 @@ private:
         handler->PSendSysMessage("[PASS] ProgressionLayout valid: Cap {}", uint32(layout.maxLevel));
         handler->PSendSysMessage("[PASS] Enabled eras continuous and terminating at Cap");
 
-        sCoAContentScaling->PurgeExpiredPendingPolicies();
-        handler->PSendSysMessage("[PASS] Pending LFG policies verified ({} active groups, {} player aliases)",
-            sCoAContentScaling->GetPendingGroupPoliciesCount(), sCoAContentScaling->GetPendingPlayerPoliciesCount());
-
         handler->PSendSysMessage("All validation checks passed.");
-        return true;
-    }
-
-    static bool HandleLfgStatus(ChatHandler* handler)
-    {
-        Player* player = handler->GetPlayer();
-        if (!player)
-            return false;
-
-        lfg::LfgCompositionMode const mode = sCoAContentScaling->GetPlayerLfgMode(player->GetGUID());
-        uint32 const challenge = sCoAContentScaling->GetPlayerLfgChallenge(player->GetGUID());
-
-        std::string_view modeStr = "matchmaking";
-        if (mode == lfg::LfgCompositionMode::BOT_FILL)
-            modeStr = "bots";
-        else if (mode == lfg::LfgCompositionMode::CURRENT_PARTY)
-            modeStr = "party";
-
-        handler->PSendSysMessage("=== CoA LFG Settings ===");
-        handler->PSendSysMessage("Composition Mode: {}", modeStr.data());
-        if (challenge == 0)
-            handler->SendSysMessage("Challenge Size: Adaptive (matches actual player count)");
-        else
-            handler->PSendSysMessage("Challenge Size: {} player(s)", challenge);
-
-        size_t const pendingGroups = sCoAContentScaling->GetPendingGroupPoliciesCount();
-        size_t const pendingPlayers = sCoAContentScaling->GetPendingPlayerPoliciesCount();
-        if (pendingGroups > 0 || pendingPlayers > 0)
-        {
-            handler->PSendSysMessage("Pending Policies: {} group(s), {} player alias(es)", pendingGroups, pendingPlayers);
-        }
-
-        return true;
-    }
-
-    static bool HandleLfgDungeon(ChatHandler* handler, uint32 dungeonId)
-    {
-        GeneratedLfgProfile const* lfgProf = FindGeneratedLfgProfile(dungeonId);
-        if (!lfgProf)
-        {
-            handler->PSendSysMessage("LFG Dungeon ID {} not found in census.", dungeonId);
-            return true;
-        }
-
-        ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
-        uint8 effectiveMin = lfgProf->authoredMin;
-        uint8 effectiveMax = lfgProf->authoredMax;
-        if (effectiveMin > 0 && effectiveMin < 100)
-            effectiveMin = layout.MapAuthoredToEffective(lfgProf->era, effectiveMin);
-        if (effectiveMax > 0 && effectiveMax < 100)
-            effectiveMax = layout.MapAuthoredToEffective(lfgProf->era, effectiveMax);
-
-        bool const eraEnabled = layout.IsEraEnabled(lfgProf->era);
-
-        handler->PSendSysMessage("=== LFG Dungeon Profile: ID {} (Map: {}, Diff: {}) ===",
-            dungeonId, lfgProf->mapId, uint32(lfgProf->difficulty));
-        handler->PSendSysMessage("Era: {} (Status: {})",
-            ContentEraToString(lfgProf->era).data(), eraEnabled ? "ENABLED" : "LOCKED_EXPANSION");
-        handler->PSendSysMessage("Authored Levels: {} - {} (Target: {})",
-            uint32(lfgProf->authoredMin), uint32(lfgProf->authoredMax), uint32(lfgProf->authoredTarget));
-        handler->PSendSysMessage("Effective Levels: {} - {}",
-            uint32(effectiveMin), uint32(effectiveMax));
-
-        GeneratedAccessProfile const* accessProf = FindGeneratedAccessProfile(lfgProf->mapId, lfgProf->difficulty);
-        if (accessProf)
-        {
-            uint8 accMin = layout.MapAuthoredToEffective(accessProf->era, accessProf->authoredMin);
-            uint8 accMax = layout.MapAuthoredToEffective(accessProf->era, accessProf->authoredMax);
-            handler->PSendSysMessage("Dungeon Access Profile: Authored {}-{} -> Effective {}-{}",
-                uint32(accessProf->authoredMin), uint32(accessProf->authoredMax), uint32(accMin), uint32(accMax));
-        }
-
-        return true;
-    }
-
-    static bool HandleLfgMode(ChatHandler* handler, Optional<std::string> modeArgument)
-    {
-        Player* player = handler->GetPlayer();
-        if (!player)
-            return false;
-
-        if (!modeArgument)
-        {
-            HandleLfgStatus(handler);
-            handler->SendSysMessage("Usage: .lfgmode [matchmaking | bots | party]");
-            return true;
-        }
-
-        std::string const& modeArg = *modeArgument;
-        if (modeArg == "matchmaking" || modeArg == "real" || modeArg == "normal")
-        {
-            sCoAContentScaling->SetPlayerLfgMode(player->GetGUID(), lfg::LfgCompositionMode::MATCHMAKING);
-            handler->SendSysMessage("LFG Mode set to MATCHMAKING (wait for real players).");
-        }
-        else if (modeArg == "bots" || modeArg == "botfill" || modeArg == "fill")
-        {
-            if (!sScriptMgr->HasLfgAutoFillProvider())
-            {
-                handler->SendSysMessage("Warning: No bot fill provider is registered. Bot fill mode will fall back to Matchmaking upon queuing.");
-            }
-            sCoAContentScaling->SetPlayerLfgMode(player->GetGUID(), lfg::LfgCompositionMode::BOT_FILL);
-            handler->SendSysMessage("LFG Mode set to BOT_FILL (auto-fill party with bots).");
-        }
-        else if (modeArg == "party" || modeArg == "current" || modeArg == "solo")
-        {
-            sCoAContentScaling->SetPlayerLfgMode(player->GetGUID(), lfg::LfgCompositionMode::CURRENT_PARTY);
-            handler->SendSysMessage("LFG Mode set to CURRENT_PARTY (queue immediately with current group/solo, bypassing matchmaking).");
-        }
-        else
-        {
-            handler->SendSysMessage("Usage: .lfgmode [matchmaking | bots | party]");
-            return true;
-        }
-
-        sCoAContentScaling->SavePlayerLfgSettings(player);
-        return true;
-    }
-
-    static bool HandleLfgChallenge(ChatHandler* handler, Optional<std::string> challengeArgument)
-    {
-        Player* player = handler->GetPlayer();
-        if (!player)
-            return false;
-
-        if (!challengeArgument)
-        {
-            HandleLfgStatus(handler);
-            handler->SendSysMessage("Usage: .lfgchallenge [adaptive | 1..40]");
-            return true;
-        }
-
-        std::string const& challengeArg = *challengeArgument;
-        if (challengeArg == "adaptive" || challengeArg == "auto" || challengeArg == "0")
-        {
-            sCoAContentScaling->SetPlayerLfgChallenge(player->GetGUID(), 0);
-            handler->SendSysMessage("LFG Challenge Size set to Adaptive (scales dynamically to group size).");
-        }
-        else
-        {
-            try
-            {
-                int val = std::stoi(challengeArg);
-                if (val < 1 || val > 40)
-                {
-                    handler->SendSysMessage("Challenge size must be between 1 and 40 (or 'adaptive').");
-                    return true;
-                }
-
-                if (!sCoAContentScaling->SetPlayerLfgChallenge(player->GetGUID(), uint32(val)))
-                {
-                    handler->SendSysMessage("Failed to set challenge size (must be 0..40).");
-                    return true;
-                }
-                handler->PSendSysMessage("LFG Challenge Size locked to {} players.", val);
-            }
-            catch (...)
-            {
-                handler->SendSysMessage("Usage: .lfgchallenge [adaptive | 1..40]");
-                return true;
-            }
-        }
-
-        sCoAContentScaling->SavePlayerLfgSettings(player);
         return true;
     }
 };

@@ -129,7 +129,6 @@ struct ItemScalingContext
     ItemScalingPolicy policy{ItemScalingPolicy::STANDARD};
     uint32 sourceMap{0};
     uint8 specialFlags{0};
-    bool hasGeneratedProfile{false};
     bool fallbackTierInference{false};
 
     static ItemScalingContext Resolve(ItemTemplate const* proto);
