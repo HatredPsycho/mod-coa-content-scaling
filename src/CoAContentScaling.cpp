@@ -22,7 +22,12 @@
 #include "InstanceProfile.h"
 #include "InstanceScaleContext.h"
 #include "ItemBudgetScaler.h"
+#include "Chat.h"
+#include "JourneyAddon.h"
+#include "JourneyBotPlan.h"
 #include "JourneyContent.h"
+#include "WorldPacket.h"
+#include "WorldSession.h"
 #include "LFGMgr.h"
 #include "ContentScalingHooks.h"
 #include "Log.h"
@@ -89,6 +94,8 @@ void CoAContentScaling::LoadConfig()
         sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyBattlegroundsEnable, true);
     _journeySettings.enchantments =
         sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyEnchantmentsEnable, true);
+    _journeySettings.addon = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyAddonEnable, true);
+    _journeySettings.tooltips = sConfigMgr->GetOption<bool>(CoAContentScalingConfigKeys::JourneyTooltipsEnable, true);
     {
         float const general = sConfigMgr->GetOption<float>(CoAContentScalingConfigKeys::JourneyQuestXpRate, 1.0f);
         static constexpr std::array<char const*, 4> Parts = { "OldWorld", "Outland", "Northrend", "Endgame" };
@@ -970,6 +977,13 @@ namespace
                     {
                         sJourneyContent->AddScalingScope(worldMaps, bands);
                     } : LocalLevelScaling::ScalingScopeResolver(nullptr), std::memory_order_relaxed);
+                LocalLevelScaling::BotLevelPlanOwner.store(journey ?
+                    [](LocalLevelScaling::BotLevelPlan& plan) -> bool
+                    {
+                        ProgressionLayout const& layout = sCoAContentScaling->GetLayout();
+                        return layout.journey && journey::FillBotLevelPlan(layout.journeyRules,
+                            sCoAContentScaling->GetJourneySettings().trainers, layout.maxLevel, plan);
+                    } : LocalLevelScaling::BotLevelPlanResolver(nullptr), std::memory_order_relaxed);
 
                 LocalLevelScaling::QuestBaseLevelOwner.store([](Quest const* quest) -> int32
                 {
@@ -1153,6 +1167,7 @@ namespace
                 LocalLevelScaling::AuthenticMapOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::CreatureWindowOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::ScalingScopeOwner.store(nullptr, std::memory_order_relaxed);
+                LocalLevelScaling::BotLevelPlanOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestBaseLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::QuestMinLevelOwner.store(nullptr, std::memory_order_relaxed);
                 LocalLevelScaling::AbilityRequiredLevelOwner.store(nullptr, std::memory_order_relaxed);
@@ -1646,6 +1661,41 @@ namespace
             if (!sCoAContentScaling->IsEnabled())
                 return;
             sCoAContentScaling->OnPlayerLogout(player);
+        }
+
+        // At login the ZoneLevels addon learns the journey's zone and dungeon levels and what gems and enchantments
+        // really give.
+        void OnPlayerLogin(Player* player) override
+        {
+            TellAddon(player);
+        }
+
+        // The addon asks again once the interface is up: what came at login may have come before it was loaded.
+        bool OnPlayerCanUseChat(Player* player, uint32 /*type*/, uint32 language, std::string& msg,
+            Player* receiver) override
+        {
+            if (language != LANG_ADDON || receiver != player || !journey::addon::IsRequest(msg) ||
+                !sCoAContentScaling->IsEnabled() || !sCoAContentScaling->GetLayout().journey)
+                return true;
+
+            TellAddon(player);
+            return false;
+        }
+
+    private:
+        static void TellAddon(Player* player)
+        {
+            if (!player || !player->GetSession() || !sCoAContentScaling->IsEnabled() ||
+                !sCoAContentScaling->GetLayout().journey)
+                return;
+
+            for (std::string const& body : sJourneyContent->GetAddonMessages())
+            {
+                WorldPacket data;
+                ChatHandler::BuildChatPacket(data, CHAT_MSG_WHISPER, LANG_ADDON, player, player,
+                    std::string(journey::addon::Prefix) + "\t" + body);
+                player->GetSession()->SendPacket(&data);
+            }
         }
     };
 

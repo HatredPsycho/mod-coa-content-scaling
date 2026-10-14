@@ -236,6 +236,31 @@ namespace journey
         return std::min(minLevel, _shape.endgame);
     }
 
+    BotBracket Rules::ZoneBotBracket(uint32_t zone, int part, int originalMin, int originalMax, int zoneShift) const
+    {
+        int const top = _shape.endgame;
+        auto byPart = [this](int level, int part)
+        {
+            return part == 1 ? Outland(level) : part == 2 ? Northrend(level) : Classic(std::min(level, 63));
+        };
+
+        BotBracket bracket;
+        if (zone == 4080 && _shape.outland)
+        {
+            bracket.minLevel = std::max(1, top - 5);    // the Isle of Quel'Danas
+            bracket.maxLevel = top;
+            return bracket;
+        }
+        bracket.minLevel = std::clamp(byPart(originalMin, part) + zoneShift, 1, top);
+        bracket.maxLevel = std::clamp(byPart(originalMax, part) + zoneShift, bracket.minLevel, top);
+        return bracket;
+    }
+
+    std::array<int, 4> Rules::MountLevels() const
+    {
+        return { Compress(20, ERA_CLASSIC), Compress(40, ERA_CLASSIC), Outland(60), Outland(70) };
+    }
+
     double SpellLevelFactor(double hitAtOriginalLevel, double hitAtNewLevel)
     {
         if (hitAtOriginalLevel <= 0.0 || hitAtNewLevel <= 0.0 || hitAtNewLevel >= hitAtOriginalLevel)

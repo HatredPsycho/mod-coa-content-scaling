@@ -10,6 +10,7 @@
 #ifndef COA_JOURNEY_RULES_H
 #define COA_JOURNEY_RULES_H
 
+#include <array>
 #include <cstdint>
 #include <map>
 
@@ -73,6 +74,12 @@ namespace journey
         Era era = ERA_CLASSIC;
         int level = 0;
         int minLevel = 0;
+    };
+
+    struct BotBracket
+    {
+        int minLevel = 1;
+        int maxLevel = 1;
     };
 
     struct ItemPlan
@@ -162,6 +169,13 @@ namespace journey
         [[nodiscard]] int EnchantmentLevel(int requiredLevel, bool northrend, int top) const;
         /// The battlegrounds that open above the endgame take a character of the endgame into their first bracket.
         [[nodiscard]] int BattlegroundMinLevel(int minLevel) const;
+
+        /// The levels the random bots hunt a zone at, from the bracket mod-playerbots ships with, moved with a zone
+        /// set by hand.
+        [[nodiscard]] BotBracket ZoneBotBracket(uint32_t zone, int part, int originalMin, int originalMax,
+            int zoneShift) const;
+        /// The levels a character rides, rides fast, flies and flies fast from: when the journey's trainers teach it.
+        [[nodiscard]] std::array<int, 4> MountLevels() const;
 
     private:
         Shape _shape;

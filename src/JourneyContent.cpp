@@ -13,6 +13,7 @@
 #include "DBCStores.h"
 #include "ItemBudgetScaler.h"
 #include "ItemTemplate.h"
+#include "JourneyAddon.h"
 #include "JourneyData.h"
 #include "LFGMgr.h"
 #include "Map.h"
@@ -22,6 +23,7 @@
 #include "SpellInfo.h"
 #include "SpellMgr.h"
 #include "Trainer.h"
+#include "World.h"
 #include <algorithm>
 #include <map>
 
@@ -30,6 +32,14 @@ namespace
     uint64 InstanceKey(uint32 mapId, uint8 difficulty)
     {
         return (uint64(mapId) << 8) | difficulty;
+    }
+
+    // The level a dungeon is meant for, a few levels above its entry as it was before the journey (the journey is
+    // about two thirds as long as the original road).
+    uint8 Recommended(LFGDungeonEntry const* dbc, uint8 minLevel, uint8 maxLevel)
+    {
+        int const above = std::max<int>(0, int(dbc->TargetLevel) - int(dbc->MinLevel));
+        return uint8(std::clamp<int>(minLevel + int(std::lround(above * 0.65)), minLevel, maxLevel));
     }
 
     int EntryOf(journey::Rules const& rules, journey::InstanceData const& instance, bool manual = true)
@@ -244,6 +254,8 @@ void JourneyContent::BuildDungeonFinder(JourneyBuildReport& report)
 
         dungeon->minlevel = *entry;
         dungeon->maxlevel = std::max<uint8>(dungeon->minlevel, _maxPlayerLevel);
+        _dungeonLevels.push_back({ dbc->ID, dungeon->minlevel, dungeon->maxlevel,
+            Recommended(dbc, dungeon->minlevel, dungeon->maxlevel) });
         uint8& lowest = lowestOfGroup.try_emplace({ dungeon->group, uint8(dungeon->difficulty) }, dungeon->minlevel)
             .first->second;
         lowest = std::min(lowest, dungeon->minlevel);
@@ -258,6 +270,9 @@ void JourneyContent::BuildDungeonFinder(JourneyBuildReport& report)
 
         random->minlevel = lowest->second;
         random->maxlevel = std::max<uint8>(random->minlevel, _maxPlayerLevel);
+        if (LFGDungeonEntry const* dbc = sLFGDungeonStore.LookupEntry(random->id))
+            _dungeonLevels.push_back({ dbc->ID, random->minlevel, random->maxlevel,
+                Recommended(dbc, random->minlevel, random->maxlevel) });
         ++report.dungeonFinderEntries;
     }
 }
@@ -405,15 +420,32 @@ JourneyEnchantmentReport JourneyContent::BuildEnchantments()
         if (!entry)
             continue;
 
-        bool changed = false;
+        std::vector<std::pair<uint32, uint32>> changes;
         for (uint32 i = 0; i < MAX_SPELL_ITEM_ENCHANTMENT_EFFECTS; ++i)
             if (entry->amount[i] && (entry->type[i] == ITEM_ENCHANTMENT_TYPE_DAMAGE ||
                 entry->type[i] == ITEM_ENCHANTMENT_TYPE_RESISTANCE || entry->type[i] == ITEM_ENCHANTMENT_TYPE_STAT))
             {
-                entry->amount[i] = std::max<uint32>(1, uint32(std::lround(entry->amount[i] * factor)));
-                changed = true;
+                uint32 const before = entry->amount[i];
+                entry->amount[i] = std::max<uint32>(1, uint32(std::lround(before * factor)));
+                changes.emplace_back(before, entry->amount[i]);
             }
-        report.enchantments += changed;
+        if (changes.empty())
+            continue;
+        ++report.enchantments;
+
+        // The text the client shows for it, with its numbers as they are now: for the addon's tooltips.
+        uint32 const locale = sWorld->GetDefaultDbcLocale();
+        char const* description = locale < 16 ? entry->description[locale] : nullptr;
+        if (!description || !*description)
+            description = entry->description[0];
+        if (description && *description)
+        {
+            std::string const before = description;
+            std::string const after = journey::addon::Retext(before, changes);
+            if (after != before && before.size() < 100 && after.size() < 100 &&
+                journey::addon::CanCarry(before) && journey::addon::CanCarry(after))
+                _enchantmentTexts.emplace_back(before, after);
+        }
     }
 
     // The level an enchantment of Outland or Northrend asks for follows the journey like the world it comes from.
@@ -434,6 +466,51 @@ JourneyEnchantmentReport JourneyContent::BuildEnchantments()
         }
     }
     return report;
+}
+
+std::vector<std::string> JourneyContent::GetAddonMessages() const
+{
+    std::vector<std::string> messages;
+    if (!IsBuilt() || !_settings.addon)
+        return messages;
+
+    messages.emplace_back("B");
+
+    std::vector<std::string> zones;
+    for (journey::ZoneData const& zone : journey::Zones)
+    {
+        int const entry = _rules.ZoneEntry(zone.zone, zone.part, zone.originalEntry);
+        zones.push_back(std::string(zone.key) + "=" + std::to_string(entry) + "-" +
+            std::to_string(std::max(entry, _rules.GetShape().endgame)) + ";");
+    }
+    // The world map also names the levels of a whole continent when zoomed out: Outland and Northrend get the lowest
+    // entry of their zones up to the endgame.
+    static constexpr std::array<char const*, 3> Continents = { nullptr, "Expansion01", "Northrend" };
+    for (uint8 part = 1; part <= 2; ++part)
+    {
+        int lowest = _rules.GetShape().endgame;
+        for (journey::ZoneData const& zone : journey::Zones)
+            if (zone.part == part)
+                lowest = std::min(lowest, _rules.ZoneEntry(zone.zone, zone.part, zone.originalEntry));
+        zones.push_back(std::string(Continents[part]) + "=" + std::to_string(lowest) + "-" +
+            std::to_string(_rules.GetShape().endgame) + ";");
+    }
+    for (std::string& message : journey::addon::Chunk('Z', zones))
+        messages.push_back(std::move(message));
+
+    std::vector<std::string> dungeons;
+    for (DungeonLevels const& dungeon : _dungeonLevels)
+        dungeons.push_back(std::to_string(dungeon.id) + "=" + std::to_string(dungeon.minLevel) + "-" +
+            std::to_string(dungeon.maxLevel) + "-" + std::to_string(dungeon.recommended) + ";");
+    for (std::string& message : journey::addon::Chunk('L', dungeons))
+        messages.push_back(std::move(message));
+
+    if (_settings.tooltips)
+        for (auto const& [before, after] : _enchantmentTexts)
+            messages.push_back("E" + before + "~" + after);
+
+    messages.emplace_back("D");
+    return messages;
 }
 
 float JourneyContent::GetQuestXpRate(uint32 questId, float defaultRate) const

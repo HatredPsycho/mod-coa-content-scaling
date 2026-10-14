@@ -185,6 +185,17 @@ CoAContentScaling.Journey.Enchantments.Enable = 1
 CoAContentScaling.Journey.Quests.XpRate = 1.0
 
 #
+# CoAContentScaling.Journey.Addon.Enable
+# CoAContentScaling.Journey.Tooltips.Enable
+#     Description: Tell the ZoneLevels client addon (client/AddOns/ZoneLevels in this module) at login the
+#                  zone levels of the journey for the world map and the levels of the Dungeon Finder's
+#                  dungeons, and - with Tooltips - the lines of gems and enchantments with what they give now.
+#     Default:     1, 1
+#
+CoAContentScaling.Journey.Addon.Enable = 1
+CoAContentScaling.Journey.Tooltips.Enable = 1
+
+#
 # CoAContentScaling.AuthenticMaps
 #     Description: Comma separated map ids played at their authored levels on every difficulty.
 #                  Creatures keep their level, health and damage, entry keeps its authored level

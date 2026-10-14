@@ -76,6 +76,7 @@ public:
     void SetAdaptiveMechanicsEnabled(bool enabled) { _adaptiveMechanicsEnabled = enabled; }
 
     [[nodiscard]] ProgressionLayout const& GetLayout() const { return _layout; }
+    [[nodiscard]] JourneySettings const& GetJourneySettings() const { return _journeySettings; }
 
     // Effective Level Mapping
     [[nodiscard]] uint8 GetEffectiveCreatureLevel(CreatureTemplate const* cinfo, Creature const* creature, uint8 authoredLevel) const;

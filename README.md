@@ -63,6 +63,13 @@ Riding and the professions are taught at the journey's levels, the battlegrounds
 endgame, gems and the enchantments of Outland's and Northrend's professions are cut by what their game's top rewards
 kept, and quest experience can be tuned per part of the journey.
 
+The random bots of mod-playerbots follow the journey through the core's bot level plan hook: they stop at the endgame,
+ride and fly when the journey's trainers teach it, and hunt each zone at its journey levels, Outland and Northrend
+included (the `coa-scaling` branch of the CoA fork of mod-playerbots reads it). The client addon
+`client/AddOns/ZoneLevels` (from mod-world-journey) shows the journey's zone levels on the world map, the Dungeon
+Finder's dungeons at their new levels and what gems and enchantments really give; copy it into the client's
+`Interface\AddOns` and clear the client cache once.
+
 ### 2. Combat Budget Normalization (Creature Stats)
 In AzerothCore, `CreatureBaseStats` indexes health and damage by `expansion`. Simply lowering a creature's level in memory still uses the WotLK expansion multiplier table.
 `mod-coa-content-scaling` addresses this by decoupling **Character Level** from **Content Power**:

@@ -9,7 +9,9 @@
 
 #include "Define.h"
 #include "JourneyRules.h"
+#include "ContentScalingHooks.h"
 #include "LocalLevelScaling.h"
+#include <string>
 #include <array>
 #include <atomic>
 #include <functional>
@@ -31,6 +33,8 @@ struct JourneySettings
     bool trainers{true};
     bool battlegrounds{true};
     bool enchantments{true};
+    bool addon{true};
+    bool tooltips{true};
     // On top of the core's quest experience rate, for the old world, Outland, Northrend and the endgame.
     std::array<float, 4> questXpRates{ 1.0f, 1.0f, 1.0f, 1.0f };
 };
@@ -68,6 +72,10 @@ public:
     JourneyEnchantmentReport BuildEnchantments();
 
     [[nodiscard]] bool IsBuilt() const { return _built.load(std::memory_order_acquire); }
+
+    // What the ZoneLevels addon is told at login: the zone levels, the Dungeon Finder's levels and what gems and
+    // enchantments really give.
+    [[nodiscard]] std::vector<std::string> GetAddonMessages() const;
 
     // The experience rate a quest pays on the journey, given the core's own.
     [[nodiscard]] float GetQuestXpRate(uint32 questId, float defaultRate) const;
@@ -134,6 +142,16 @@ private:
     journey::Rules _rules;
     std::unordered_map<uint32, journey::ItemEra> _enchantmentEras;       // gem and craft enchantments
     std::unordered_map<uint32, std::vector<uint32>> _socketBonusItems;   // socket bonus -> items carrying it
+
+    struct DungeonLevels
+    {
+        uint32 id;
+        uint8 minLevel;
+        uint8 maxLevel;
+        uint8 recommended;
+    };
+    std::vector<DungeonLevels> _dungeonLevels;
+    std::vector<std::pair<std::string, std::string>> _enchantmentTexts;
 };
 
 #define sJourneyContent JourneyContent::Instance()

@@ -7,10 +7,14 @@
 #include "ItemBudgetScaler.h"
 #include "ItemTemplate.h"
 #include "ContentEraResolver.h"
+#include "JourneyAddon.h"
+#include "JourneyBotPlan.h"
 #include "JourneyData.h"
 #include "JourneyRules.h"
 #include "ProgressionLayout.h"
 #include "gtest/gtest.h"
+#include <array>
+#include <iterator>
 #include <map>
 
 namespace
@@ -575,4 +579,82 @@ TEST(JourneyRulesTest, BattlegroundsAboveTheEndgameOpenAtIt)
     shape.endgame = 55;
     shape.northrendRange = { 40, 50 };
     EXPECT_EQ(journey::Rules(shape).BattlegroundMinLevel(71), 55);
+}
+
+TEST(JourneyRulesTest, RandomBotsHuntEachZoneAtItsJourneyLevels)
+{
+    journey::Rules const rules = DefaultRules();
+
+    journey::BotBracket const elwynn = rules.ZoneBotBracket(12, 0, 5, 12, 0);
+    EXPECT_EQ(elwynn.minLevel, 4);
+    EXPECT_EQ(elwynn.maxLevel, 8);
+
+    journey::BotBracket const shifted = rules.ZoneBotBracket(12, 0, 5, 12, 2);
+    EXPECT_EQ(shifted.minLevel, 6);
+    EXPECT_EQ(shifted.maxLevel, 10);
+
+    journey::BotBracket const outland = rules.ZoneBotBracket(9999, 1, 58, 63, 0);
+    EXPECT_EQ(outland.minLevel, 30);
+    EXPECT_EQ(outland.maxLevel, 37);
+
+    journey::BotBracket const wintergrasp = rules.ZoneBotBracket(9999, 2, 79, 80, 0);
+    EXPECT_EQ(wintergrasp.minLevel, 58);
+    EXPECT_EQ(wintergrasp.maxLevel, 60);
+
+    journey::BotBracket const quelDanas = rules.ZoneBotBracket(4080, 1, 68, 73, 0);
+    EXPECT_EQ(quelDanas.minLevel, 55);
+    EXPECT_EQ(quelDanas.maxLevel, 60);
+
+    std::array<int, 4> const mounts = rules.MountLevels();
+    EXPECT_EQ(mounts[0], 13);
+    EXPECT_EQ(mounts[1], 26);
+    EXPECT_EQ(mounts[2], 33);
+    EXPECT_EQ(mounts[3], 47);
+}
+
+TEST(JourneyBotTest, ThePlanCoversEveryBotZoneInsideTheJourney)
+{
+    journey::Rules const rules = DefaultRules();
+
+    LocalLevelScaling::BotLevelPlan plan;
+    ASSERT_TRUE(journey::FillBotLevelPlan(rules, true, 80, plan));
+    EXPECT_EQ(plan.maxLevel, 60);
+    EXPECT_EQ(plan.groundMountLevel, 13);
+    EXPECT_EQ(plan.fastFlyMountLevel, 47);
+    EXPECT_EQ(plan.zoneBrackets.size(), std::size(journey::BotZones));
+    for (auto const& [zone, bracket] : plan.zoneBrackets)
+    {
+        EXPECT_GE(bracket.first, 1) << zone;
+        EXPECT_LE(bracket.first, bracket.second) << zone;
+        EXPECT_LE(bracket.second, 60) << zone;
+    }
+
+    LocalLevelScaling::BotLevelPlan withoutTrainers;
+    ASSERT_TRUE(journey::FillBotLevelPlan(rules, false, 60, withoutTrainers));
+    EXPECT_EQ(withoutTrainers.groundMountLevel, 0);
+}
+
+TEST(JourneyAddonTest, MessagesArePackedAndTextsRewritten)
+{
+    std::vector<std::string> const entries = { "Elwynn=1-60;", "Westfall=7-60;", "Duskwood=13-60;" };
+    std::vector<std::string> const one = journey::addon::Chunk('Z', entries);
+    ASSERT_EQ(one.size(), 1u);
+    EXPECT_EQ(one[0], "ZElwynn=1-60;Westfall=7-60;Duskwood=13-60;");
+
+    std::vector<std::string> const split = journey::addon::Chunk('L', entries, 20);
+    ASSERT_EQ(split.size(), 3u);
+    EXPECT_EQ(split[1], "LWestfall=7-60;");
+    EXPECT_TRUE(journey::addon::Chunk('Z', {}).empty());
+
+    EXPECT_EQ(journey::addon::Retext("Increases Agility by 10 and Stamina by 10.", { { 10, 7 }, { 10, 6 } }),
+              "Increases Agility by 7 and Stamina by 6.");
+    EXPECT_EQ(journey::addon::Retext("+100 Attack Power", { { 10, 5 } }), "+100 Attack Power");
+    EXPECT_EQ(journey::addon::Retext("+12 Strength", { { 12, 8 } }), "+8 Strength");
+
+    EXPECT_TRUE(journey::addon::CanCarry("+8 Strength"));
+    EXPECT_FALSE(journey::addon::CanCarry("a~b"));
+    EXPECT_FALSE(journey::addon::CanCarry(""));
+    EXPECT_TRUE(journey::addon::IsRequest("ZoneLevels\t?"));
+    EXPECT_FALSE(journey::addon::IsRequest("ZoneLevels\tB"));
+    EXPECT_FALSE(journey::addon::IsRequest("CoAScale\t?"));
 }
